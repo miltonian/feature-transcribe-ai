@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "FeatureTranscribeAI"
+version = "0.0.1"
+description = "FeatureTranscribeAI is an innovative tool designed to streamline the development process generating embeddings from your codebase, analyzing user input for feature requests, identifying relevant existing code, and crafting prompts for generative models to automatically generate code fulfilling the feature request"
+authors = [{ name = "Alexander Hamilton", email = "miltonian33@gmail.com" }]
+license = { file="LICENSE" }
+readme = "README.md"
+requires-python = ">=3.7"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Code Generators",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+]
+
+[project.urls]
+repository = "http://github.com/miltonian/FeatureTranscribeAI"
+
+[tool.setuptools]
+packages = ["feature_transcribe"]
+install_requires = [
+    "requests",
+    "numpy",
+    "typing",
+    "argparse",
+    "openai_api",
+    "ts_parser",
+    "utils"
+]
