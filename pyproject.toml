@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "FeatureTranscribeAI"
 version = "0.0.1"
-description = "FeatureTranscribeAI is an innovative tool designed to streamline the development process generating embeddings from your codebase, analyzing user input for feature requests, identifying relevant existing code, and crafting prompts for generative models to automatically generate code fulfilling the feature request"
+description = "FeatureTranscribeAI is an innovative tool designed to streamline the development process by automating the identification and generation of code based on new feature requests."
 authors = [{ name = "Alexander Hamilton", email = "miltonian33@gmail.com" }]
 license = { file="LICENSE" }
 readme = "README.md"
