@@ -1,6 +1,6 @@
 # FeatureTranscribeAI
 
-FeatureTranscribeAI automates code generation for new features using ML and OpenAI, analyzing codebases and crafting prompts for seamless development integration.
+FeatureTranscribeAI is an innovative tool designed to streamline the development process generating embeddings from your codebase, analyzing user input for feature requests, identifying relevant existing code, and crafting prompts for generative models to automatically generate code fulfilling the feature request
 
 ## Features
 
