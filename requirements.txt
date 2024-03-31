@@ -1,0 +1,7 @@
+requests
+numpy
+typing
+argparse
+openai_api
+ts_parser
+utils
