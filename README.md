@@ -1,3 +1,6 @@
+
+![feature-transcribe-ai-logo](https://github.com/miltonian/feature-transcribe-ai/assets/8435923/9eb97133-4949-4b62-b110-932928c9b6db)
+
 # FeatureTranscribeAI
 
 FeatureTranscribeAI is an innovative tool designed to streamline the development process by automating the identification and generation of code based on new feature requests. Utilizing the power of machine learning and the OpenAI API, FeatureTranscribeAI does the following: 
