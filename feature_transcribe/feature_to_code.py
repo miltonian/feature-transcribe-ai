@@ -123,7 +123,7 @@ def aggregate_code_segments(relevant_code_paths):
 #     print(result)
 #     return result.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
 
-def make_openai_request(prompt, aggregated_code, api_key, model="gpt-3.5-turbo", max_tokens=1000):
+def make_openai_request(prompt, paths, api_key, model="gpt-3.5-turbo", max_tokens=1000):
     client = OpenAI(api_key=api_key)
 
     # Relevant code paths previously obtained
@@ -224,10 +224,10 @@ def main(prompt: str, api_key: str, model: str):
     relevant_code_paths = feature_to_code_segments(embeddings, paths, new_feature_embedding, top_n=7)
 
     # Aggregate the selected code segments
-    aggregated_code = aggregate_code_segments(relevant_code_paths)
+    # aggregated_code = aggregate_code_segments(relevant_code_paths)
 
     # Now, use the prompt and aggregated_code with your existing function
-    response_text = make_openai_request(prompt, aggregated_code, api_key, model)
+    response_text = make_openai_request(prompt, relevant_code_paths, api_key, model)
 
     return {
         'relevant_code_paths': [path for _, path, _ in relevant_code_paths],
