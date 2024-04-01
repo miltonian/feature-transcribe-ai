@@ -21,7 +21,7 @@ FeatureTranscribeAI is an innovative tool designed to streamline the development
 - **feature_to_code.py**: Analyzes embeddings to identify code snippets relevant to a new feature request. It handles loading embeddings, code content, and new feature descriptions.
 - **openai_api.py**: Interfaces with the OpenAI API for generating embeddings from text inputs, crucial for analyzing both existing code and feature requests.
 - **prepare_code.py**: Prepares your codebase for analysis by parsing and generating embeddings, integrating functionalities from `openai_api` and other parsing utilities.
-- **code_parser.py**: Specializes in parsing Swift/Typescript/Javascript files, enabling detailed analysis and embeddings generation for Swift/Typescript/Javascript codebases.
+- **code_parser.py**: Specializes in parsing Swift/Typescript/Javascript/Python files, enabling detailed analysis and embeddings generation for Swift/Typescript/Javascript codebases.
 - **utils.py**: Offers utility functions for file and directory management, supporting the overall workflow of FeatureTranscribeAI.
 
 ## Requirements
