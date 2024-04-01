@@ -6,3 +6,4 @@ openai
 utils
 flask
 nltk
+sklearn
