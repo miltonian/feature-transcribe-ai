@@ -45,33 +45,38 @@ def load_new_feature_embedding(file_path):
     embedding = np.array(data['embedding'])  # Extract and convert the embedding to a numpy array
     return description, embedding
 
-def feature_to_code_segments(embeddings, paths, new_feature_embedding, top_n=10, confidence_threshold=0.3):
+def feature_to_code_segments(embeddings, paths, new_feature_embedding, top_n=15):
+    """
+    Find and return the top N most relevant code segments to the new feature,
+    with a more stringent dynamic confidence threshold.
+    """
+
     # Calculate cosine similarity
     similarities = cosine_similarity(new_feature_embedding.reshape(1, -1), embeddings)[0]
 
-    # Get indices sorted by similarity
-    sorted_indices = np.argsort(similarities)[::-1]  # Sort in descending order
+    # Dynamically adjust the confidence threshold to be more stringent
+    mean_similarity = np.mean(similarities)
+    std_dev_similarity = np.std(similarities)
+    # Multiply std_dev by a factor (e.g., 1.5) to make the threshold more selective
+    dynamic_confidence_threshold = mean_similarity + (1.5 * std_dev_similarity)
 
-    # Filter indices by confidence threshold
-    high_confidence_indices = [i for i in sorted_indices if similarities[i] >= confidence_threshold]
-    
-    # If there are fewer high confidence items than top_n, just use the high confidence items
-    if len(high_confidence_indices) < top_n:
-        relevant_indices = high_confidence_indices
-    else:
-        # If there are more high confidence items than top_n, select the top_n items
-        relevant_indices = high_confidence_indices[:top_n]
+    # Sort indices by similarity in descending order
+    sorted_indices = np.argsort(similarities)[::-1]
+
+    # Select indices with similarities above the more stringent threshold
+    high_confidence_indices = [i for i in sorted_indices if similarities[i] >= dynamic_confidence_threshold]
+
+    # Strictly enforce the top_n limit, only considering high-confidence indices up to top_n
+    relevant_indices = high_confidence_indices[:top_n]
 
     # Load the code for the relevant paths
     codes = load_code_from_paths([paths[i] for i in relevant_indices])
 
-    # Select the corresponding codes, paths, and similarities for those above the threshold
+    # Compile relevant codes, paths, and similarities, ensuring to sort by similarity
     relevant_codes_paths = [(codes[idx], paths[i], similarities[i]) for idx, i in enumerate(relevant_indices)]
-
-    # Sort by similarity score in descending order
     relevant_codes_paths.sort(key=lambda x: x[2], reverse=True)
 
-    # Print paths and their corresponding confidence for items above the threshold
+    # Optionally, print paths and their corresponding confidence
     for _, path, similarity in relevant_codes_paths:
         print(f"Path: {path}, Confidence: {similarity:.2f}")
 
