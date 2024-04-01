@@ -4,6 +4,7 @@ import numpy as np
 import json
 import requests
 from sklearn.metrics.pairwise import cosine_similarity
+import openai
 
 def load_embeddings_with_code(file_path):
     """Load embeddings and corresponding file paths from a JSON file."""
@@ -89,36 +90,72 @@ def aggregate_code_segments(relevant_code_paths):
     aggregated_code = '\n\n'.join([code for code, _, _ in relevant_code_paths])
     return aggregated_code
 
-# TODO: write something about different model usage
+# def make_openai_request(prompt, aggregated_code, api_key, model="gpt-3.5-turbo", max_tokens=150000):
+#     """
+#     Send a chat request to the OpenAI API using aggregated code as context.
+    
+#     :param aggregated_code: The aggregated code segments as a single string, serving as context.
+#     :param model: The model identifier.
+#     :param max_tokens: Maximum number of tokens to generate.
+#     :return: The API response as a string.
+#     """ 
+#     headers = {
+#         "Content-Type": "application/json",
+#         "Authorization": f"Bearer {api_key}"
+#     }
+#     data = {
+#         "model": model,
+#         "messages": [
+#             {"role": "system", "content": "You're a coding assistant. Below is some code related to a feature in development. Please respond with the code to make this new feature request or bug fix"},
+#             {"role": "user", "content": aggregated_code},
+#             {"role": "user", "content": prompt},
+#         ],
+#         # "temperature": 0.5,
+#         # "max_tokens": max_tokens,
+#     }
+
+#     response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
+#     print(response)
+#     result = response.json()
+#     print(result)
+#     return result.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+
 def make_openai_request(prompt, aggregated_code, api_key, model="gpt-3.5-turbo", max_tokens=150000):
     """
-    Send a chat request to the OpenAI API using aggregated code as context.
-    
+    Uploads aggregated code as a file to OpenAI, then sends a chat request using the file ID.
+
     :param aggregated_code: The aggregated code segments as a single string, serving as context.
     :param model: The model identifier.
     :param max_tokens: Maximum number of tokens to generate.
     :return: The API response as a string.
-    """ 
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}"
-    }
-    data = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": "You're a coding assistant. Below is some code related to a feature in development. Please respond with the code to make this new feature request or bug fix"},
-            {"role": "user", "content": aggregated_code},
+    """
+    
+    openai.api_key = api_key
+
+    # Prepare the aggregated code as file data for upload
+    file_data = aggregated_code.encode('utf-8')
+
+    # Upload the file to OpenAI and get the file ID
+    response = openai.File.create(file=file_data, purpose='assistants')
+    file_id = response['id']
+
+    # Use the file ID in the chat completion request
+    response = openai.ChatCompletion.create(
+        model=model,
+        messages=[
+            {
+                "role": "system",
+                "content": f"You're a coding assistant. A file with ID {file_id} contains some code related to a feature in development. Please respond with the code to make this new feature request or bug fix."
+            },
             {"role": "user", "content": prompt},
         ],
-        # "temperature": 0.5,
-        # "max_tokens": max_tokens,
-    }
+        max_tokens=max_tokens
+    )
 
-    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
-    print(response)
-    result = response.json()
-    print(result)
-    return result.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+    # Get the content of the response
+    response_content = response.choices[0].message['content']
+
+    return response_content.strip()
 
 def main(prompt: str, api_key: str, model: str):
     """
