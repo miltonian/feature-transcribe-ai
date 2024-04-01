@@ -124,27 +124,28 @@ def aggregate_code_segments(relevant_code_paths):
 #     return result.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
 
 def make_openai_request(prompt, aggregated_code, api_key, model="gpt-3.5-turbo", max_tokens=1000):
-    """
-    Creates a chat assistant session, uploads aggregated code as a file to OpenAI, 
-    and sends a chat message referencing the file ID to get a response.
-    
-    :param aggregated_code: The aggregated code segments as a single string, serving as context.
-    :param model: The model identifier.
-    :param max_tokens: Maximum number of tokens to generate, within API limits.
-    :return: The API response as a string.
-    """
     client = OpenAI(api_key=api_key)
 
-    # Save the aggregated code to a temporary file
-    temp_file_path = "temp_aggregated_code.txt"
-    with open(temp_file_path, "w") as file:
-        file.write(aggregated_code)
-    
-    # Upload the file to OpenAI and get the file ID
-    with open(temp_file_path, 'rb') as file:
-        upload_response = client.files.create(file=file, purpose='assistants')
-        file_id = upload_response.id
-    
+    # Relevant code paths previously obtained
+    relevant_code_paths = load_code_from_paths(paths)  # Assuming `paths` is defined and contains your code file paths
+
+    # Initialize a list to store file IDs
+    file_ids = []
+
+    # Iterate over relevant code paths and upload each as a file
+    for code_path in relevant_code_paths:
+        with open(code_path, "r") as file:
+            try:
+                # Attempt to upload the file and store the resulting file ID
+                upload_response = client.files.create(file=file, purpose='fine-tune')
+                file_ids.append(upload_response.id)
+            except Exception as e:
+                print(f"Failed to upload {code_path}: {e}")
+
+    # Check if any files were uploaded successfully
+    if not file_ids:
+        return "No files were uploaded successfully."
+
     # Initialize the chat assistant session
     assistant = client.beta.assistants.create(
         instructions="You are a software engineer. Based on the files uploaded in the users request, please use them as context and respond with the code to make this new feature request or bug fix. Please include as much code as you can to complete the feature request or bug fix. Don't include any files or links in your response.",
@@ -153,45 +154,31 @@ def make_openai_request(prompt, aggregated_code, api_key, model="gpt-3.5-turbo",
         model=model
     )
 
+    # Create and run a new thread with the uploaded file IDs
     run = client.beta.threads.create_and_run(
         assistant_id=assistant.id,
         thread={
             "messages": [
-                {"role": "user", "file_ids": [file_id], "content": f"use the uploaded files as context. {prompt}"}
+                {"role": "user", "file_ids": file_ids, "content": f"use the uploaded files as context. {prompt}"}
             ]
         }
     )
-    # Initialize attempt counter
+
+    # Wait for the thread run to complete, checking periodically
     attempts = 0
     max_attempts = 60
-
-    # Loop until run is completed or max_attempts reached
-    while attempts < max_attempts:
-        # Retrieve the current state of the run
-        run = client.beta.threads.runs.retrieve(
-            thread_id=run.thread_id,
-            run_id=run.id
-        )
-        print(f"Attempt {attempts + 1}: Run state - Completed: {bool(run.completed_at)}")
-
-        # Check if run.completed_at is truthy, indicating completion
-        if run.completed_at:
-            print("Run completed.")
-            break  # Exit the loop if run is completed
-
-        # Wait for 1 second before the next attempt
+    while attempts < max_attempts and not run.completed_at:
         time.sleep(1)
-        attempts += 1  # Increment the attempt counter
+        run = client.beta.threads.runs.retrieve(thread_id=run.thread_id, run_id=run.id)
+        attempts += 1
 
-    # Optional: Handle the case when max_attempts are reached but run is not completed
-    if not run.completed_at:
-        print("Max attempts reached. The run did not complete in time.")
-        return "Max attempts reached. The run did not complete in time."
-
-    thread_messages = client.beta.threads.messages.list(run.thread_id)
-    system_message_content = get_system_message_content(thread_messages)
-    print(system_message_content)
-    return system_message_content.strip()
+    # Handle the completed run
+    if run.completed_at:
+        # Retrieve and print all messages from the thread
+        thread_messages = client.beta.threads.messages.list(run.thread_id)
+        return get_system_message_content(thread_messages)
+    else:
+        return "The run did not complete in time."
 
 def get_system_message_content(response):
     # Initialize a list to collect messages along with their creation timestamps
