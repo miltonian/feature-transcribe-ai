@@ -30,8 +30,9 @@ FeatureTranscribeAI is an innovative tool designed to streamline the development
 ## Setup
 
 1. Install Python 3.x and ensure it's correctly set up on your system.
-2. Install necessary Python packages: `pip install -r requirements.txt`.
+2. Install necessary Python packages: `pip3 install -r requirements.txt`.
 3. Configure your OpenAI API key as an environment variable for secure access: `export OPENAI_API_KEY='your_api_key_here'`.
+4. To run the html example: `flask --app app.py run --port 5003`
 
 ## Usage
 
@@ -40,13 +41,13 @@ Using FeatureTranscribeAI involves just a couple of straightforward steps. Befor
 1. **Prepare Your Codebase**: Run the `prepare_code.py` script to analyze your codebase and generate embeddings. This process respects your `.gitignore` settings, automatically excluding files and directories you've opted not to track with Git. This ensures a focus on the meaningful parts of your codebase for analysis.
 
    ```bash
-   python feature_transcribe/prepare_code.py --directory '/path/to/your/code' 
+   python3 feature_transcribe/prepare_code.py --directory '/path/to/your/code' 
 This step parses your code (including Swift, TypeScript, JavaScript, and their JSX/TSX variants), generating embeddings that capture the semantic essence of your codebase.
 
 2. **Identify Relevant Code**: Once your codebase is prepared, run `feature_to_code.py` with a description of the new feature you want to integrate. The script uses the generated embeddings to find code snippets that are most relevant to your feature request.
 
     ```bash
-    python feature_transcribe/feature_to_code.py --feature 'feature_description.json'
+    python3 feature_transcribe/feature_to_code.py --feature 'feature_description.json'
  This command analyzes the embeddings to match your feature request with existing code, helping you identify where and how to best integrate new features.
 
 ### Respecting .gitignore

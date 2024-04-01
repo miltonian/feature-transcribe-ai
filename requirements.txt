@@ -2,6 +2,7 @@ requests
 numpy
 typing
 argparse
-openai_api
-ts_parser
+openai
 utils
+flask
+nltk

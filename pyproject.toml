@@ -32,7 +32,7 @@ install_requires = [
     "numpy",
     "typing",
     "argparse",
-    "openai_api",
-    "ts_parser",
+    "openai",
+    "flask",
     "utils"
 ]

@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FeatureTranscribeAI Interface</title>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.25.0/themes/prism.min.css" rel="stylesheet" />
+    <style>
+        body {
+            font-family: 'Manrope', sans-serif;
+            margin: 0;
+            padding: 40px;
+            background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 480px;
+            background: #fff;
+            border-radius: 20px;
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
+            padding: 25px;
+            margin: 20px;
+            transition: 0.3s ease-in-out;
+        }
+
+        .container:hover {
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.15);
+            transform: translateY(-10px);
+        }
+
+        h1 {
+            color: #e09a76;
+            font-size: 2rem;
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        h2 {
+            font-size: 1.5rem;
+            color: #555;
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            font-weight: 600;
+            margin-bottom: .5rem;
+            display: block;
+            color: #666;
+        }
+
+        input[type="text"],
+        input[type="submit"] {
+            width: calc(100% - 15px);
+            padding: 12px 15px;
+            margin-bottom: 1rem;
+            border-radius: 12px;
+            border: 1px solid #ccc;
+            transition: all 0.3s;
+        }
+
+        input[type="text"] {
+            background-color: #fafafa;
+            border: 2px solid #e2e8f0;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #e09a76;
+            background-color: #fff;
+        }
+
+        input[type="submit"] {
+            background-color: #e09a76;
+            color: #ffffff;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        input[type="submit"] {
+            width: 100%;
+        }
+
+        input[type="submit"]:hover {
+            background-color: #ca8269;
+        }
+
+        form:not(:last-child) {
+            margin-bottom: 2rem;
+        }
+
+        * {
+            box-sizing: border-box;
+            /* Apply box-sizing to all elements */
+        }
+
+        /* Add loader CSS */
+        .loader {
+            border: 16px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 16px solid #3498db;
+            width: 120px;
+            height: 120px;
+            -webkit-animation: spin 2s linear infinite;
+            animation: spin 2s linear infinite;
+            display: none;
+            /* Hide by default */
+            margin: 0 auto;
+            /* Center the loader */
+        }
+
+        @-webkit-keyframes spin {
+            0% {
+                -webkit-transform: rotate(0deg);
+            }
+
+            100% {
+                -webkit-transform: rotate(360deg);
+            }
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Improve form layout */
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        /* Uniform button styles */
+        button,
+        input[type="submit"] {
+            background-color: #e09a76;
+            color: #ffffff;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            border-radius: 12px;
+            padding: 10px 20px;
+            transition: background-color 0.3s;
+        }
+
+        button:hover,
+        input[type="submit"]:hover {
+            background-color: #ca8269;
+        }
+
+        /* Additional form success and error messages */
+        .success-message,
+        .error-message {
+            display: none;
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+
+        #success-message {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        #error-message {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        textarea {
+            padding: 12px 15px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            margin-bottom: 1rem;
+            font-family: 'Manrope', sans-serif;
+            font-size: 1rem;
+            background-color: #fafafa;
+            transition: border-color 0.3s ease-in-out;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #e09a76;
+            background-color: #fff;
+        }
+    </style>
+</head>
+
+<body>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.25.0/prism.min.js"></script>
+    <div class="container">
+        <h1>FeatureTranscribeAI</h1>
+
+        <div class="form-group">
+            <label for="api_key">OpenAI API Key:</label>
+            <input type="text" id="api_key" name="api_key" required>
+        </div>
+
+        <!-- Prepare Your Codebase Form -->
+        <form id="prepareForm" action="/prepare_code" method="post">
+            <h2>Prepare Your Codebase</h2>
+            <div class="form-group">
+                <label for="directory">Codebase Directory:</label>
+                <input type="text" id="directory" name="directory" required>
+            </div>
+            <input type="submit" value="Prepare Codebase">
+            <div id="loadPrepareForm" class="loader"></div>
+            <div id="prepareForm-success-message" class="success-message">Codebase prepared successfully.</div>
+            <div id="prepareForm-error-message" class="error-message">Error preparing codebase.</div>
+        </form>
+
+        <!-- Transcribe Feature To Code Form -->
+        <form id="transcribeForm" action="/feature_to_code" method="post">
+            <h2>Transcribe Feature To Code</h2>
+            <div class="form-group">
+                <label for="feature">Feature Description:</label>
+                <textarea id="feature" name="feature" required rows="4" style="width: 100%;"></textarea>
+            </div>
+            <div class="form-group">
+                <label for="model">Choose a model:</label>
+                <select id="model" name="model">
+                    <option value="gpt-4">GPT-4</option>
+                    <option value="gpt-3.5-turbo">GPT-3.5-Turbo</option>
+                </select>
+            </div>
+            <input type="submit" value="Feature To Code">
+            <div id="loadTranscribeForm" class="loader"></div>
+            <div id="transcribeForm-success-message" class="success-message">Transcribed feature to code successfully.
+            </div>
+            <div id="transcribeForm-error-message" class="error-message">Error transcribing feature to code.</div>
+        </form>
+
+        <!-- Display Response -->
+        <div id="response"></div>
+        <div id="relevant-code-paths"></div>
+    </div>
+</body>
+
+<script>
+    function extractLanguage(str) {
+        return str.replace(/`/g, '').split(' ')[0]
+    }
+    function formatCodeBlocks(text) {
+        const regex = /(\w+)?\s([\s\S]*?)/gm; let match; let result = text; let isReplaced = true; // initial state to start loop 
+        try {
+            while (isReplaced) {
+                isReplaced = false; // reset state 
+                while ((match = regex.exec(result)) !== null) { // This is necessary to avoid infinite loops with zero-width matches 
+                    if (match.index === regex.lastIndex) { regex.lastIndex++; } // Prepare the replacement string with syntax highlighting applied 
+                    const language = match[1] || 'plaintext';
+                    const codeBlock = match[2].trim();
+                    const replacement = `` + Prism.highlight(codeBlock, Prism.languages[language], language) + '';
+                    // Using split() and join() to replace all instances of the match 
+                    if (result.includes(match[0])) { result = result.split(match[0]).join(replacement); isReplaced = true; }
+                }
+            }
+        } catch (error) { console.error(error) } return result;
+    }
+
+    function highlightCode(code, language) {
+        return Prism.highlight(code, Prism.languages[language], language);
+    }
+    // Modified function to toggle visibility of the loader
+    function submitForm(formId, actionUrl, loaderId) {
+        document.getElementById(loaderId).style.display = "block"; // Show the loader
+
+        const form = document.getElementById(formId);
+        const formData = new FormData(form);
+        formData.append('api_key', document.getElementById('api_key').value); // Append the API key to form data
+        document.getElementById(formId + '-success-message').style.display = "none";
+        document.getElementById(formId + '-error-message').style.display = "none";
+        fetch(actionUrl, {
+            method: 'POST',
+            body: formData
+        })
+            .then(response => {
+                if (!response.ok) { throw new Error('Network response was not ok'); }
+                return response.json()
+            }) // Assuming the server response is text
+            .then(data => {
+                if (data.relevant_code_paths) {
+                    document.getElementById('relevant-code-paths').innerHTML = "<h3>Relevant Code Paths:</h3><ul>" + data.relevant_code_paths.map(path => '<li>' + path + '</li>').join('') + "</ul><br /><h3>OpenAI API Response:</h3>"
+                    document.getElementById('response').innerText = data.response;
+                    // let formattedResponse = formatCodeBlocks(data.response);
+                    // document.getElementById('response').innerHTML = data.response;
+                } else {
+                    document.getElementById('response').innerText = data.response
+                }
+                document.getElementById(formId + '-success-message').style.display = "block"; // Show success 
+                document.getElementById(loaderId).style.display = "none"; // Hide the loader on response
+            })
+            .catch((error) => {
+                document.getElementById(formId + '-error-message').style.display = "block"; // Show error message 
+                console.error('Error:', error);
+                return false
+            });
+
+        return false; // Prevent the default form submit action
+
+        // fetch(actionUrl, requestOptions)
+        //     .then((response) => {
+        //         document.getElementById(loaderId).style.display = "none"; // Hide the loader on response
+        //         return response.text();
+        //     })
+        //     .then((data) => {
+        //         document.getElementById('response').innerHTML = "<h3>OpenAI API Response:</h3>" + data.response + "<h3>Relevant Code Paths:</h3><ul>" + data.relevant_code_paths.map(path => '<li>' + path + '</li>').join('') + "</ul>"; 
+        //     })
+        //     .catch((error) => {
+        //         console.error('Error:', error);
+        //         document.getElementById(loaderId).style.display = "none"; // Hide the loader on error
+        //     });
+
+        return false;
+    }
+
+    // Modified event listeners to include loader ID
+    document.getElementById('prepareForm').onsubmit = function () { return submitForm('prepareForm', '/prepare_code', 'loadPrepareForm'); };
+    document.getElementById('transcribeForm').onsubmit = function () { return submitForm('transcribeForm', '/feature_to_code', 'loadTranscribeForm'); };</script>
+</body>
+
+</html>

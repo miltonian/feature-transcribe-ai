@@ -1,5 +1,5 @@
 import argparse
-from openai_api import generate_embedding
+from feature_transcribe.openai_api import generate_embedding
 import numpy as np
 import json
 import requests
@@ -45,7 +45,7 @@ def load_new_feature_embedding(file_path):
     embedding = np.array(data['embedding'])  # Extract and convert the embedding to a numpy array
     return description, embedding
 
-def feature_to_code_segments(embeddings, paths, new_feature_embedding, top_n=150, confidence_threshold=0.3):
+def feature_to_code_segments(embeddings, paths, new_feature_embedding, top_n=10, confidence_threshold=0.3):
     """
     Find and return the top N most relevant code segments to the new feature,
     as well as those above a certain confidence threshold.
@@ -114,29 +114,47 @@ def make_openai_request(prompt, aggregated_code, api_key, model="gpt-3.5-turbo",
     print(result)
     return result.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
 
+def main(prompt: str, api_key: str, model: str):
+    """
+    Main function to generate embedding for the feature, 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Process files to generate embeddings.")
-    parser.add_argument('--feature', type=str, required=True, help='Description of the new feature')
-    parser.add_argument('--api_key', type=str, required=True, help='OpenAI API key')
-    args = parser.parse_args()
-
-    prompt = args.feature
-    api_key = args.api_key
+    Parameters:
+    - feature (str): Feature request / issue.
+    - api_key (str): OpenAI API key for generating embeddings.
+    - model (str): OpenAI model used for generating embeddings.
+    """
+    
     new_feature_embedding = generate_embedding(prompt, api_key)
-    print(new_feature_embedding)
     new_feature_embedding = np.array(new_feature_embedding)
 
     # Load the embeddings and paths from another JSON (as per your existing structure)
     embeddings, paths = load_embeddings_with_code('embeddings_output.json')
     
     # Find the top N most relevant code segments
-    relevant_code_paths = feature_to_code_segments(embeddings, paths, new_feature_embedding, top_n=15)
+    relevant_code_paths = feature_to_code_segments(embeddings, paths, new_feature_embedding, top_n=7)
     
     # Aggregate the selected code segments
     aggregated_code = aggregate_code_segments(relevant_code_paths)
     
     # Now, use the prompt and aggregated_code with your existing function
-    response_text = make_openai_request(prompt, aggregated_code, api_key)
-    print("OpenAI API Chat Response:")
-    print(response_text)
+    response_text = make_openai_request(prompt, aggregated_code, api_key, model)
+    
+    return {
+        'relevant_code_paths': [path for _, path, _ in relevant_code_paths],
+        'response': response_text
+    }
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Process files to generate embeddings.")
+    parser.add_argument('--feature', type=str, required=True, help='Description of the new feature')
+    parser.add_argument('--api_key', type=str, required=True, help='OpenAI API key')
+    parser.add_argument('--model', type=str, default="gpt-3.5-turbo", help='OpenAI model')
+    args = parser.parse_args()
+
+    prompt = args.feature
+    api_key = args.api_key
+    model = args.model
+
+    main(prompt, api_key, model)
+
+    

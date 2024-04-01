@@ -1,6 +1,6 @@
 import argparse
-from code_parser import parse_file
-from utils import find_files
+from feature_transcribe.code_parser import parse_file
+from feature_transcribe.utils import find_files
 import json
 
 def main(directory: str, api_key: str, output_file: str):
