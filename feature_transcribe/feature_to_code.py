@@ -143,7 +143,6 @@ def make_openai_request(prompt, aggregated_code, api_key, model="gpt-3.5-turbo",
     # Upload the file to OpenAI and get the file ID
     with open(temp_file_path, 'rb') as file:
         upload_response = client.files.create(file=file, purpose='assistants')
-        # file_id = upload_response['id']
         file_id = upload_response.id
     
     # Initialize the chat assistant session
@@ -158,7 +157,7 @@ def make_openai_request(prompt, aggregated_code, api_key, model="gpt-3.5-turbo",
         assistant_id=assistant.id,
         thread={
             "messages": [
-            {"role": "user", "file_ids": [file_id], "content": prompt}
+                {"role": "user", "file_ids": [file_id], "content": f"use the uploaded files as context. {prompt}"}
             ]
         }
     )
@@ -193,25 +192,6 @@ def make_openai_request(prompt, aggregated_code, api_key, model="gpt-3.5-turbo",
     system_message_content = get_system_message_content(thread_messages)
     print(system_message_content)
     return system_message_content.strip()
-    print(thread_messages)
-
-    # Assuming you want to return some part of the run response
-    # Adjust the return statement according to what you need from the run object
-    print(run)
-    return run.responses[-1].content if run.completed_at else "Run did not complete."
-    
-
-    # Send a message to the assistant, including the file_id in the system message for context
-    # chat_response = assistant.send_messages(messages=[
-    #     # {"role": "system", "content": f"The following is a code context: file={file_id}"},
-    #     # {"role": "system", "content": f"A file with ID {file_id} contains some code related to a feature in development. "},
-    #     {"role": "user", "file_ids": [file_id], "content": prompt}
-    # ])
-    
-    # # Extract the response content
-    # response_content = chat_response['responses'][0]['message']['content']
-
-    return "" # response_content.strip()
 
 def get_system_message_content(response):
     # Initialize a list to collect messages along with their creation timestamps
