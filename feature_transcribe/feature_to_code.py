@@ -3,8 +3,11 @@ from feature_transcribe.openai_api import generate_embedding
 import numpy as np
 import json
 import requests
+import time
 from sklearn.metrics.pairwise import cosine_similarity
-import openai
+from openai import OpenAI
+
+
 
 def load_embeddings_with_code(file_path):
     """Load embeddings and corresponding file paths from a JSON file."""
@@ -16,7 +19,7 @@ def load_embeddings_with_code(file_path):
     for item in data:
         # Use .get() to safely access 'embedding', defaulting to None if not found
         embedding = item.get('embedding')
-        
+
         # Skip the item if 'embedding' is falsey
         if not embedding:
             continue
@@ -93,7 +96,7 @@ def aggregate_code_segments(relevant_code_paths):
 # def make_openai_request(prompt, aggregated_code, api_key, model="gpt-3.5-turbo", max_tokens=150000):
 #     """
 #     Send a chat request to the OpenAI API using aggregated code as context.
-    
+
 #     :param aggregated_code: The aggregated code segments as a single string, serving as context.
 #     :param model: The model identifier.
 #     :param max_tokens: Maximum number of tokens to generate.
@@ -120,42 +123,119 @@ def aggregate_code_segments(relevant_code_paths):
 #     print(result)
 #     return result.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
 
-def make_openai_request(prompt, aggregated_code, api_key, model="gpt-3.5-turbo", max_tokens=150000):
+def make_openai_request(prompt, aggregated_code, api_key, model="gpt-3.5-turbo", max_tokens=1000):
     """
-    Uploads aggregated code as a file to OpenAI, then sends a chat request using the file ID.
-
+    Creates a chat assistant session, uploads aggregated code as a file to OpenAI, 
+    and sends a chat message referencing the file ID to get a response.
+    
     :param aggregated_code: The aggregated code segments as a single string, serving as context.
     :param model: The model identifier.
-    :param max_tokens: Maximum number of tokens to generate.
+    :param max_tokens: Maximum number of tokens to generate, within API limits.
     :return: The API response as a string.
     """
+    client = OpenAI(api_key=api_key)
+
+    # Save the aggregated code to a temporary file
+    temp_file_path = "temp_aggregated_code.txt"
+    with open(temp_file_path, "w") as file:
+        file.write(aggregated_code)
     
-    openai.api_key = api_key
-
-    # Prepare the aggregated code as file data for upload
-    file_data = aggregated_code.encode('utf-8')
-
     # Upload the file to OpenAI and get the file ID
-    response = openai.File.create(file=file_data, purpose='assistants')
-    file_id = response['id']
-
-    # Use the file ID in the chat completion request
-    response = openai.ChatCompletion.create(
-        model=model,
-        messages=[
-            {
-                "role": "system",
-                "content": f"You're a coding assistant. A file with ID {file_id} contains some code related to a feature in development. Please respond with the code to make this new feature request or bug fix."
-            },
-            {"role": "user", "content": prompt},
-        ],
-        max_tokens=max_tokens
+    with open(temp_file_path, 'rb') as file:
+        upload_response = client.files.create(file=file, purpose='assistants')
+        # file_id = upload_response['id']
+        file_id = upload_response.id
+    
+    # Initialize the chat assistant session
+    assistant = client.beta.assistants.create(
+        instructions="You are a software engineer. Based on the files uploaded in the users request, please use them as context and respond with the code to make this new feature request or bug fix. Please include as much code as you can to complete the feature request or bug fix. Don't include any files or links in your response.",
+        name="FeatureTranscribeAI",
+        tools=[{"type": "code_interpreter"}],
+        model=model
     )
 
-    # Get the content of the response
-    response_content = response.choices[0].message['content']
+    run = client.beta.threads.create_and_run(
+        assistant_id=assistant.id,
+        thread={
+            "messages": [
+            {"role": "user", "file_ids": [file_id], "content": prompt}
+            ]
+        }
+    )
+    # Initialize attempt counter
+    attempts = 0
+    max_attempts = 60
 
-    return response_content.strip()
+    # Loop until run is completed or max_attempts reached
+    while attempts < max_attempts:
+        # Retrieve the current state of the run
+        run = client.beta.threads.runs.retrieve(
+            thread_id=run.thread_id,
+            run_id=run.id
+        )
+        print(f"Attempt {attempts + 1}: Run state - Completed: {bool(run.completed_at)}")
+
+        # Check if run.completed_at is truthy, indicating completion
+        if run.completed_at:
+            print("Run completed.")
+            break  # Exit the loop if run is completed
+
+        # Wait for 1 second before the next attempt
+        time.sleep(1)
+        attempts += 1  # Increment the attempt counter
+
+    # Optional: Handle the case when max_attempts are reached but run is not completed
+    if not run.completed_at:
+        print("Max attempts reached. The run did not complete in time.")
+        return "Max attempts reached. The run did not complete in time."
+
+    thread_messages = client.beta.threads.messages.list(run.thread_id)
+    system_message_content = get_system_message_content(thread_messages)
+    print(system_message_content)
+    return system_message_content.strip()
+    print(thread_messages)
+
+    # Assuming you want to return some part of the run response
+    # Adjust the return statement according to what you need from the run object
+    print(run)
+    return run.responses[-1].content if run.completed_at else "Run did not complete."
+    
+
+    # Send a message to the assistant, including the file_id in the system message for context
+    # chat_response = assistant.send_messages(messages=[
+    #     # {"role": "system", "content": f"The following is a code context: file={file_id}"},
+    #     # {"role": "system", "content": f"A file with ID {file_id} contains some code related to a feature in development. "},
+    #     {"role": "user", "file_ids": [file_id], "content": prompt}
+    # ])
+    
+    # # Extract the response content
+    # response_content = chat_response['responses'][0]['message']['content']
+
+    return "" # response_content.strip()
+
+def get_system_message_content(response):
+    # Initialize a list to collect messages along with their creation timestamps
+    assistant_messages_with_timestamps = []
+
+    # Iterate through each message in the response data
+    for message in response.data:
+        # Check if the message role is 'assistant'
+        if message.role == 'assistant':
+            # Extract the timestamp and content for each message
+            timestamp = message.created_at
+            content_blocks = message.content  # This should be a list of content blocks
+            for block in content_blocks:
+                if hasattr(block, 'text') and hasattr(block.text, 'value'):
+                    # Append a tuple of (timestamp, message text) for each block
+                    assistant_messages_with_timestamps.append((timestamp, block.text.value))
+    
+    # Sort the collected messages by timestamp (the first item in each tuple)
+    assistant_messages_with_timestamps.sort(key=lambda x: x[0])
+
+    # Extract and join the sorted message texts into a single string with line breaks
+    combined_message = "\n\n".join([msg[1] for msg in assistant_messages_with_timestamps])
+    return combined_message
+
 
 def main(prompt: str, api_key: str, model: str):
     """
@@ -166,22 +246,22 @@ def main(prompt: str, api_key: str, model: str):
     - api_key (str): OpenAI API key for generating embeddings.
     - model (str): OpenAI model used for generating embeddings.
     """
-    
+
     new_feature_embedding = generate_embedding(prompt, api_key)
     new_feature_embedding = np.array(new_feature_embedding)
 
     # Load the embeddings and paths from another JSON (as per your existing structure)
     embeddings, paths = load_embeddings_with_code('embeddings_output.json')
-    
+
     # Find the top N most relevant code segments
     relevant_code_paths = feature_to_code_segments(embeddings, paths, new_feature_embedding, top_n=7)
-    
+
     # Aggregate the selected code segments
     aggregated_code = aggregate_code_segments(relevant_code_paths)
-    
+
     # Now, use the prompt and aggregated_code with your existing function
     response_text = make_openai_request(prompt, aggregated_code, api_key, model)
-    
+
     return {
         'relevant_code_paths': [path for _, path, _ in relevant_code_paths],
         'response': response_text
@@ -200,4 +280,3 @@ if __name__ == "__main__":
 
     main(prompt, api_key, model)
 
-    
