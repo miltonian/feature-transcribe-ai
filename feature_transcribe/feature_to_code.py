@@ -46,37 +46,38 @@ def load_new_feature_embedding(file_path):
     return description, embedding
 
 def feature_to_code_segments(embeddings, paths, new_feature_embedding, top_n=10, confidence_threshold=0.3):
-    """
-    Find and return the top N most relevant code segments to the new feature,
-    as well as those above a certain confidence threshold.
-    """
-
     # Calculate cosine similarity
     similarities = cosine_similarity(new_feature_embedding.reshape(1, -1), embeddings)[0]
 
     # Get indices sorted by similarity
     sorted_indices = np.argsort(similarities)[::-1]  # Sort in descending order
-    # print(similarities)
+
     # Filter indices by confidence threshold
     high_confidence_indices = [i for i in sorted_indices if similarities[i] >= confidence_threshold]
     
-    # If there are fewer high confidence items than top_n, fill up with the highest other items until reaching top_n
+    # If there are fewer high confidence items than top_n, just use the high confidence items
     if len(high_confidence_indices) < top_n:
-        top_indices = sorted_indices[:top_n]
+        relevant_indices = high_confidence_indices
     else:
-        # Ensure we don't miss top N due to confidence filtering
-        top_indices = high_confidence_indices[:max(len(high_confidence_indices), top_n)]
+        # If there are more high confidence items than top_n, select the top_n items
+        relevant_indices = high_confidence_indices[:top_n]
 
     # Load the code for the relevant paths
-    codes = load_code_from_paths([paths[i] for i in top_indices])
+    codes = load_code_from_paths([paths[i] for i in relevant_indices])
 
-    # Select the corresponding codes, paths, and similarities
-    relevant_codes_paths = [(codes[idx], paths[i], similarities[i]) for idx, i in enumerate(top_indices)]
+    # Select the corresponding codes, paths, and similarities for those above the threshold
+    relevant_codes_paths = [(codes[idx], paths[i], similarities[i]) for idx, i in enumerate(relevant_indices)]
 
     # Sort by similarity score in descending order
     relevant_codes_paths.sort(key=lambda x: x[2], reverse=True)
 
+    # Print paths and their corresponding confidence for items above the threshold
+    for _, path, similarity in relevant_codes_paths:
+        print(f"Path: {path}, Confidence: {similarity:.2f}")
+
     return relevant_codes_paths
+
+
 
 def aggregate_code_segments(relevant_code_paths):
     """Aggregate selected code segments into a single coherent context."""
