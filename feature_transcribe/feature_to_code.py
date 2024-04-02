@@ -152,7 +152,7 @@ def make_openai_request(prompt, paths, api_key, model="gpt-3.5-turbo", max_token
     instructions = "Please provide a coding solution based on the context provided in the uploaded files. Base Your response on the file ids included in the request. your response should include the code i need to copy and paste into my application to solve the request"
 
     # Explicitly mention the use of uploaded files in your prompt
-    prompt_with_reference = "analyze these files first, " + file_names_string + "after you analyze, complete the following request and tell me how to add it to my codebase within these files: " + prompt
+    prompt_with_reference = "of the files uploaded, " + file_names_string + "analyze the files you think are most relevant first, then after you analyze, complete the following request and tell me how to add it to my codebase within these files: " + prompt
 
     # Initialize the chat assistant session
     assistant = client.beta.assistants.create(
