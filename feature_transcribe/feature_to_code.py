@@ -128,6 +128,7 @@ def make_openai_request(prompt, paths, api_key, model="gpt-3.5-turbo", max_token
 
     # Initialize a list to store file IDs
     file_ids = []
+    file_names = []
 
     # Iterate over relevant code paths and upload each as a file
     for code_path in paths:
@@ -136,6 +137,8 @@ def make_openai_request(prompt, paths, api_key, model="gpt-3.5-turbo", max_token
                 # Attempt to upload the file and store the resulting file ID
                 upload_response = client.files.create(file=file, purpose='assistants')
                 file_ids.append(upload_response.id)
+                file_name_after_last_slash = code_path.split('/')[-1]
+                file_names.append(file_name_after_last_slash)
             except Exception as e:
                 print(f"Failed to upload {code_path}: {e}")
 
@@ -143,32 +146,29 @@ def make_openai_request(prompt, paths, api_key, model="gpt-3.5-turbo", max_token
     if not file_ids:
         return "No files were uploaded successfully."
 
+    file_names_string = ",".join(file_names)
+
     # Clear and concise instructions
-    instructions = "Please provide a coding solution based on the context provided in the uploaded files. Your response should include the code i need to copy and paste into my application to solve the request"
+    instructions = "Please provide a coding solution based on the context provided in the uploaded files. Base Your response on the file ids included in the request. your response should include the code i need to copy and paste into my application to solve the request"
 
     # Explicitly mention the use of uploaded files in your prompt
-    prompt_with_reference = "Based on the uploaded files, " + prompt
+    prompt_with_reference = "analyze these files first, " + file_names_string + "after you analyze, complete the following request and tell me how to add it to my codebase within these files: " + prompt
 
     # Initialize the chat assistant session
     assistant = client.beta.assistants.create(
         # instructions="You are a software engineer. Based on the files in your knowledge, please use them as context and respond with the code to make this new feature request or bug fix given the files . Please include as much code as you can to complete the feature request or bug fix. Don't include any files or links in your response.",
         instructions=instructions,
         name="FeatureTranscribeAI",
-        tools=[{"type": "code_interpreter"}, {"type": "retrieval"}],
+        tools=[{"type": "code_interpreter"}],
         model=model,
-        file_ids=file_ids
+        # file_ids=file_ids
     )
-
+    
     run = client.beta.threads.create_and_run(
         model=model,
         assistant_id=assistant.id,
         thread={
             "messages": [
-                # {
-                #     "role": "user",
-                #     "file_ids": file_ids, 
-                #     "content": instructions
-                # },
                 {
                     "role": "user",
                     "content": prompt_with_reference,
@@ -180,7 +180,7 @@ def make_openai_request(prompt, paths, api_key, model="gpt-3.5-turbo", max_token
 
     # Wait for the thread run to complete, checking periodically
     attempts = 0
-    max_attempts = 60
+    max_attempts = 120
     while attempts < max_attempts and not run.completed_at:
         time.sleep(1)
         run = client.beta.threads.runs.retrieve(thread_id=run.thread_id, run_id=run.id)
@@ -249,7 +249,7 @@ def main(prompt: str, api_key: str, model: str):
     embeddings, paths = load_embeddings_with_code('embeddings_output.json')
 
     # Find the top N most relevant code segments
-    relevant_code_paths = feature_to_code_segments(embeddings, paths, new_feature_embedding, top_n=7)
+    relevant_code_paths = feature_to_code_segments(embeddings, paths, new_feature_embedding, top_n=10)
 
     # Aggregate the selected code segments
     # aggregated_code = aggregate_code_segments(relevant_code_paths)
