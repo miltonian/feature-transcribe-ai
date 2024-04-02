@@ -50,41 +50,34 @@ def load_new_feature_embedding(file_path):
     return description, embedding
 
 def feature_to_code_segments(embeddings, paths, new_feature_embedding, top_n=15):
-    """
-    Find and return the top N most relevant code segments to the new feature,
-    with a more stringent dynamic confidence threshold.
-    """
-
     # Calculate cosine similarity
     similarities = cosine_similarity(new_feature_embedding.reshape(1, -1), embeddings)[0]
 
-    # Dynamically adjust the confidence threshold to be more stringent
+    # Calculate mean and standard deviation of similarities
     mean_similarity = np.mean(similarities)
     std_dev_similarity = np.std(similarities)
-    # Multiply std_dev by a factor (e.g., 1.5) to make the threshold more selective
+
+    # Adjust the threshold more selectively based on distribution
     dynamic_confidence_threshold = mean_similarity + (1.5 * std_dev_similarity)
 
-    # Sort indices by similarity in descending order
-    sorted_indices = np.argsort(similarities)[::-1]
+    # Filter indices by dynamic threshold
+    high_confidence_indices = [i for i, similarity in enumerate(similarities) if similarity >= dynamic_confidence_threshold]
 
-    # Select indices with similarities above the more stringent threshold
-    high_confidence_indices = [i for i in sorted_indices if similarities[i] >= dynamic_confidence_threshold]
+    # Sort high-confidence indices by similarity, then select top N
+    relevant_indices = sorted(high_confidence_indices, key=lambda i: similarities[i], reverse=True)[:top_n]
 
-    # Strictly enforce the top_n limit, only considering high-confidence indices up to top_n
-    relevant_indices = high_confidence_indices[:top_n]
-
-    # Load the code for the relevant paths
+    # Extract code for relevant paths
     codes = load_code_from_paths([paths[i] for i in relevant_indices])
 
-    # Compile relevant codes, paths, and similarities, ensuring to sort by similarity
+    # Compile relevant codes and paths, ensuring to sort by similarity
     relevant_codes_paths = [(codes[idx], paths[i], similarities[i]) for idx, i in enumerate(relevant_indices)]
     relevant_codes_paths.sort(key=lambda x: x[2], reverse=True)
 
-    # Optionally, print paths and their corresponding confidence
     for _, path, similarity in relevant_codes_paths:
         print(f"Path: {path}, Confidence: {similarity:.2f}")
 
     return relevant_codes_paths
+
 
 
 
@@ -195,6 +188,33 @@ def make_openai_request(prompt, paths, api_key, model="gpt-3.5-turbo", max_token
     else:
         return "The run did not complete in time."
 
+def make_openai_request_for_prompt(prompt, api_key, model="gpt-3.5-turbo", max_tokens=1000):
+    client = OpenAI(api_key=api_key)
+
+    # Clear and concise instructions
+    instructions = f"""
+    heres the feature description i'm giving openai along with the relevant files. give me a better prompt from this that uses the following strategies below. only return the prompt for me. nothing else.
+        - Increase Detail in Prompts: Provide more detailed prompts that focus on the specific aspect of the code or logic you're interested in. This can help guide the model's attention to the relevant parts of the files.
+        - Break Down the Problem: Instead of asking for an analysis of the entire file or a large block of code, break down your request into smaller, more manageable questions that focus on specific functions, methods, or logic flows.
+        - Provide Context: Along with the code, include explanations or comments within your prompt that highlight the key areas of interest or specific functionalities you need help with. This can help the model better understand the context and provide more targeted insights.
+        - Iterative Querying: Use an iterative approach where you start with a general inquiry and then drill down based on the model's responses. This can help uncover more detailed and specific insights over multiple interactions.
+        
+        and below is the feature description i want you to improve:
+        
+        {prompt}
+    """
+
+    completion = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "user", "content": instructions}
+        ]
+    )
+    message = completion.choices[0].message.content
+    print("message")
+    print(message)
+    return message
+
 def get_system_message_content(response):
     # Assuming response is a list of message objects
     assistant_messages_with_timestamps = [(message.created_at, message.content[0].text.value)
@@ -241,7 +261,23 @@ def main(prompt: str, api_key: str, model: str):
     - api_key (str): OpenAI API key for generating embeddings.
     - model (str): OpenAI model used for generating embeddings.
     """
+    # prompt = """
+    # Given the detailed feature description and the steps to reproduce the issue, here is an optimized prompt to guide OpenAI in analyzing the provided code and offering specific insights or solutions:
 
+    # "I'm working on a feature within the 'ralph' environment that involves updating property details through a PUT request to internalUrl/v2/properties. The issue arises with the identity_verification_report_images field, which should only accept 'selfie' or 'document' as valid inputs. However, it currently accepts any text input, leading to unexpected behavior in subsequent processes, specifically when interacting with external/identity/applicants/${applicantId}/images, where it still returns a 200 response along with the selfie image even for invalid inputs.
+
+    # Here are the steps to reproduce the issue:
+
+    #     Make a PUT request to internalUrl/v2/properties and update the identity_verification_report_images field with an invalid value like 'helloWorld'.
+    #     Then, make a request to externalUrl/identity/applicants/${applicantId}/images.
+
+    # The expected behavior is that the system should reject any values for identity_verification_report_images other than 'selfie' or 'document'. If invalid values are set, it should not proceed to return a 200 response from the external/identity/applicants/${applicantId}/images endpoint.
+
+    # Given this context and the files provided, which include handlers and validations for these fields and endpoints, can you identify where the validation for identity_verification_report_images should be implemented within the provided files? Additionally, please suggest a specific code change or implementation that would enforce the correct validation, ensuring that only 'selfie' or 'document' are accepted as valid inputs for the identity_verification_report_images field. Also, consider how to handle cases where invalid inputs are provided, such as returning an appropriate error response."
+
+    # This prompt leverages the strategies of providing detailed context, focusing on the specific problem, and asking for a targeted solution, which should help in obtaining a more precise and useful response from OpenAI.
+    # """
+    
     new_feature_embedding = generate_embedding(prompt, api_key)
     new_feature_embedding = np.array(new_feature_embedding)
 
@@ -256,10 +292,14 @@ def main(prompt: str, api_key: str, model: str):
 
     # Now, use the prompt and aggregated_code with your existing function
     onlypaths = [path for _, path, _ in relevant_code_paths]
-    response_text = make_openai_request(prompt, onlypaths, api_key, model)
+
+    relevant_code_paths_with_confidence = [f"Path: {path}, Confidence: {confidence:.2f}" for _, path, confidence in relevant_code_paths]
+    
+    prompt_response = make_openai_request_for_prompt(prompt, api_key, model)
+    response_text = make_openai_request(prompt_response, onlypaths, api_key, model)
 
     return {
-        'relevant_code_paths': [path for _, path, _ in relevant_code_paths],
+        'relevant_code_paths': relevant_code_paths_with_confidence,
         'response': response_text
     }
 
