@@ -126,18 +126,15 @@ def aggregate_code_segments(relevant_code_paths):
 def make_openai_request(prompt, paths, api_key, model="gpt-3.5-turbo", max_tokens=1000):
     client = OpenAI(api_key=api_key)
 
-    # Relevant code paths previously obtained
-    relevant_code_paths = load_code_from_paths(paths)  # Assuming `paths` is defined and contains your code file paths
-
     # Initialize a list to store file IDs
     file_ids = []
 
     # Iterate over relevant code paths and upload each as a file
-    for code_path in relevant_code_paths:
-        with open(code_path, "r") as file:
+    for code_path in paths:
+        with open(code_path, "rb") as file:
             try:
                 # Attempt to upload the file and store the resulting file ID
-                upload_response = client.files.create(file=file, purpose='fine-tune')
+                upload_response = client.files.create(file=file, purpose='assistants')
                 file_ids.append(upload_response.id)
             except Exception as e:
                 print(f"Failed to upload {code_path}: {e}")
@@ -146,20 +143,37 @@ def make_openai_request(prompt, paths, api_key, model="gpt-3.5-turbo", max_token
     if not file_ids:
         return "No files were uploaded successfully."
 
+    # Clear and concise instructions
+    instructions = "Please provide a coding solution based on the context provided in the uploaded files. Your response should include the code i need to copy and paste into my application to solve the request"
+
+    # Explicitly mention the use of uploaded files in your prompt
+    prompt_with_reference = "Based on the uploaded files, " + prompt
+
     # Initialize the chat assistant session
     assistant = client.beta.assistants.create(
-        instructions="You are a software engineer. Based on the files uploaded in the users request, please use them as context and respond with the code to make this new feature request or bug fix. Please include as much code as you can to complete the feature request or bug fix. Don't include any files or links in your response.",
+        # instructions="You are a software engineer. Based on the files in your knowledge, please use them as context and respond with the code to make this new feature request or bug fix given the files . Please include as much code as you can to complete the feature request or bug fix. Don't include any files or links in your response.",
+        instructions=instructions,
         name="FeatureTranscribeAI",
-        tools=[{"type": "code_interpreter"}],
-        model=model
+        tools=[{"type": "code_interpreter"}, {"type": "retrieval"}],
+        model=model,
+        file_ids=file_ids
     )
 
-    # Create and run a new thread with the uploaded file IDs
     run = client.beta.threads.create_and_run(
+        model=model,
         assistant_id=assistant.id,
         thread={
             "messages": [
-                {"role": "user", "file_ids": file_ids, "content": f"use the uploaded files as context. {prompt}"}
+                # {
+                #     "role": "user",
+                #     "file_ids": file_ids, 
+                #     "content": instructions
+                # },
+                {
+                    "role": "user",
+                    "content": prompt_with_reference,
+                    "file_ids": file_ids 
+                }
             ]
         }
     )
@@ -174,34 +188,48 @@ def make_openai_request(prompt, paths, api_key, model="gpt-3.5-turbo", max_token
 
     # Handle the completed run
     if run.completed_at:
-        # Retrieve and print all messages from the thread
+        # Retrieve and aggregate all "assistant" messages
         thread_messages = client.beta.threads.messages.list(run.thread_id)
-        return get_system_message_content(thread_messages)
+        assistant_messages = get_system_message_content(thread_messages)
+        return assistant_messages
     else:
         return "The run did not complete in time."
 
 def get_system_message_content(response):
-    # Initialize a list to collect messages along with their creation timestamps
-    assistant_messages_with_timestamps = []
+    # Assuming response is a list of message objects
+    assistant_messages_with_timestamps = [(message.created_at, message.content[0].text.value)
+                                           for message in response.data if message.role == 'assistant']
 
-    # Iterate through each message in the response data
-    for message in response.data:
-        # Check if the message role is 'assistant'
-        if message.role == 'assistant':
-            # Extract the timestamp and content for each message
-            timestamp = message.created_at
-            content_blocks = message.content  # This should be a list of content blocks
-            for block in content_blocks:
-                if hasattr(block, 'text') and hasattr(block.text, 'value'):
-                    # Append a tuple of (timestamp, message text) for each block
-                    assistant_messages_with_timestamps.append((timestamp, block.text.value))
-    
-    # Sort the collected messages by timestamp (the first item in each tuple)
+    # Sort the collected messages by timestamp
     assistant_messages_with_timestamps.sort(key=lambda x: x[0])
 
-    # Extract and join the sorted message texts into a single string with line breaks
+    # Extract and join the sorted message texts
     combined_message = "\n\n".join([msg[1] for msg in assistant_messages_with_timestamps])
     return combined_message
+
+
+# def get_system_message_content(response):
+#     # Initialize a list to collect messages along with their creation timestamps
+#     assistant_messages_with_timestamps = []
+
+#     # Iterate through each message in the response data
+#     for message in response.data:
+#         # Check if the message role is 'assistant'
+#         if message.role == 'assistant':
+#             # Extract the timestamp and content for each message
+#             timestamp = message.created_at
+#             content_blocks = message.content  # This should be a list of content blocks
+#             for block in content_blocks:
+#                 if hasattr(block, 'text') and hasattr(block.text, 'value'):
+#                     # Append a tuple of (timestamp, message text) for each block
+#                     assistant_messages_with_timestamps.append((timestamp, block.text.value))
+    
+#     # Sort the collected messages by timestamp (the first item in each tuple)
+#     assistant_messages_with_timestamps.sort(key=lambda x: x[0])
+
+#     # Extract and join the sorted message texts into a single string with line breaks
+#     combined_message = "\n\n".join([msg[1] for msg in assistant_messages_with_timestamps])
+#     return combined_message
 
 
 def main(prompt: str, api_key: str, model: str):
@@ -227,7 +255,8 @@ def main(prompt: str, api_key: str, model: str):
     # aggregated_code = aggregate_code_segments(relevant_code_paths)
 
     # Now, use the prompt and aggregated_code with your existing function
-    response_text = make_openai_request(prompt, relevant_code_paths, api_key, model)
+    onlypaths = [path for _, path, _ in relevant_code_paths]
+    response_text = make_openai_request(prompt, onlypaths, api_key, model)
 
     return {
         'relevant_code_paths': [path for _, path, _ in relevant_code_paths],
