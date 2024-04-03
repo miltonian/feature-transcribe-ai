@@ -145,13 +145,13 @@ def aggregate_code_segments(relevant_code_paths):
 #     print(result)
 #     return result.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
 
-def make_openai_request(assistant_id, prompt, paths, api_key, model="gpt-3.5-turbo", max_tokens=1000):
+def upload_files(paths, api_key): 
     client = OpenAI(api_key=api_key)
 
     # Initialize a list to store file IDs
     file_ids = []
     file_names = []
-
+    print(paths)
     # Iterate over relevant code paths and upload each as a file
     for code_path in paths:
         with open(code_path, "rb") as file:
@@ -164,9 +164,16 @@ def make_openai_request(assistant_id, prompt, paths, api_key, model="gpt-3.5-tur
             except Exception as e:
                 print(f"Failed to upload {code_path}: {e}")
 
-    # Check if any files were uploaded successfully
     if not file_ids:
         return "No files were uploaded successfully."
+
+    return {
+        'file_ids': file_ids, 
+        'file_names': file_names
+    }
+                
+def make_openai_request(assistant_id, prompt, file_ids, file_names, api_key, model="gpt-3.5-turbo", max_tokens=1000):
+    client = OpenAI(api_key=api_key)
 
     file_names_string = ",".join(file_names)
 
@@ -174,7 +181,7 @@ def make_openai_request(assistant_id, prompt, paths, api_key, model="gpt-3.5-tur
     # instructions = "Please provide a coding solution based on the context provided in the uploaded files. Base Your response on the file ids included in the request. your response should include the code i need to copy and paste into my application to solve the request"
 
     # Explicitly mention the use of uploaded files in your prompt
-    prompt_with_reference = "of the files uploaded, " + file_names_string + "analyze the files you think are most relevant first, then after you analyze, complete the following request and tell me how to add it to my codebase within these files: " + prompt + "don't simplify it and dont give examples. i need the code exactly as intended and how it looks in my current codebase"
+    prompt_with_reference = "of the files uploaded, " + file_names_string + "analyze the files you think are most relevant first, then after you analyze, complete the following request and tell me how to add it to my codebase within these files: " + prompt + "don't simplify it and dont give examples. i need the code exactly as intended and how it fits in my current codebase given the context of the existing code"
 
     # Initialize the chat assistant session
     # assistant = client.beta.assistants.create(
@@ -243,6 +250,12 @@ def make_openai_request_for_prompt(prompt, api_key, model="gpt-3.5-turbo", max_t
     print(message)
     return message
 
+def delete_file(file_id, api_key):
+    client = OpenAI(api_key=api_key)
+
+    content = client.files.delete(file_id)
+    return content
+    
 def get_system_message_content(response):
     # Assuming response is a list of message objects
     assistant_messages_with_timestamps = [(message.created_at, message.content[0].text.value)
@@ -254,30 +267,6 @@ def get_system_message_content(response):
     # Extract and join the sorted message texts
     combined_message = "\n\n".join([msg[1] for msg in assistant_messages_with_timestamps])
     return combined_message
-
-
-# def get_system_message_content(response):
-#     # Initialize a list to collect messages along with their creation timestamps
-#     assistant_messages_with_timestamps = []
-
-#     # Iterate through each message in the response data
-#     for message in response.data:
-#         # Check if the message role is 'assistant'
-#         if message.role == 'assistant':
-#             # Extract the timestamp and content for each message
-#             timestamp = message.created_at
-#             content_blocks = message.content  # This should be a list of content blocks
-#             for block in content_blocks:
-#                 if hasattr(block, 'text') and hasattr(block.text, 'value'):
-#                     # Append a tuple of (timestamp, message text) for each block
-#                     assistant_messages_with_timestamps.append((timestamp, block.text.value))
-    
-#     # Sort the collected messages by timestamp (the first item in each tuple)
-#     assistant_messages_with_timestamps.sort(key=lambda x: x[0])
-
-#     # Extract and join the sorted message texts into a single string with line breaks
-#     combined_message = "\n\n".join([msg[1] for msg in assistant_messages_with_timestamps])
-#     return combined_message
 
 
 def main(prompt: str, api_key: str, model: str):
@@ -315,11 +304,18 @@ def main(prompt: str, api_key: str, model: str):
     # Find the top N most relevant code segments
     relevant_code_paths = feature_to_code_segments(embeddings, paths, new_feature_embedding, top_n=10)
 
+    onlypaths = [path for _, path, _ in relevant_code_paths]
+
+    files = upload_files(onlypaths, api_key)
+    file_ids = files['file_ids']
+    file_names = files['file_names']
+    print("fileidsandnames")
+    print(file_ids)
+    print(file_names)
+
+
     # Aggregate the selected code segments
     # aggregated_code = aggregate_code_segments(relevant_code_paths)
-
-    # Now, use the prompt and aggregated_code with your existing function
-    onlypaths = [path for _, path, _ in relevant_code_paths]
 
     relevant_code_paths_with_confidence = [f"Path: {path}, Confidence: {confidence:.2f}" for _, path, confidence in relevant_code_paths]
     
@@ -332,15 +328,22 @@ def main(prompt: str, api_key: str, model: str):
         assistant_id = create_and_store_new_assistant_id(file_path, model, api_key)
 
     if assistant_id:
-        response_text = make_openai_request(assistant_id, prompt_response, onlypaths, api_key, model)
+        response_text = make_openai_request(assistant_id, prompt_response, file_ids, file_names, api_key, model)
 
-        return {
-            'relevant_code_paths': relevant_code_paths_with_confidence,
-            'response': response_text
-        }
     else:
         print("Failed to obtain a valid Assistant ID.")
         
+    for file_id in file_ids:
+        try:
+            delete_file(file_id, api_key)
+            print(f"Successfully deleted file with ID: {file_id}")
+        except Exception as e:
+            print(f"Error deleting file with ID {file_id}: {e}")
+
+    return {
+        'relevant_code_paths': relevant_code_paths_with_confidence,
+        'response': response_text
+    }
     
 
 if __name__ == "__main__":
