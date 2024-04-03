@@ -1,3 +1,5 @@
 .DS_Store
 __pycache__
 embeddings_output.json
+temp_aggregated_code.txt
+assistant_id.json
