@@ -115,36 +115,6 @@ def aggregate_code_segments(relevant_code_paths):
     aggregated_code = '\n\n'.join([code for code, _, _ in relevant_code_paths])
     return aggregated_code
 
-# def make_openai_request(prompt, aggregated_code, api_key, model="gpt-3.5-turbo", max_tokens=150000):
-#     """
-#     Send a chat request to the OpenAI API using aggregated code as context.
-
-#     :param aggregated_code: The aggregated code segments as a single string, serving as context.
-#     :param model: The model identifier.
-#     :param max_tokens: Maximum number of tokens to generate.
-#     :return: The API response as a string.
-#     """ 
-#     headers = {
-#         "Content-Type": "application/json",
-#         "Authorization": f"Bearer {api_key}"
-#     }
-#     data = {
-#         "model": model,
-#         "messages": [
-#             {"role": "system", "content": "You're a coding assistant. Below is some code related to a feature in development. Please respond with the code to make this new feature request or bug fix"},
-#             {"role": "user", "content": aggregated_code},
-#             {"role": "user", "content": prompt},
-#         ],
-#         # "temperature": 0.5,
-#         # "max_tokens": max_tokens,
-#     }
-
-#     response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
-#     print(response)
-#     result = response.json()
-#     print(result)
-#     return result.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
-
 def upload_files(paths, api_key): 
     client = OpenAI(api_key=api_key)
 
@@ -177,21 +147,8 @@ def make_openai_request(assistant_id, prompt, file_ids, file_names, api_key, mod
 
     file_names_string = ",".join(file_names)
 
-    # Clear and concise instructions
-    # instructions = "Please provide a coding solution based on the context provided in the uploaded files. Base Your response on the file ids included in the request. your response should include the code i need to copy and paste into my application to solve the request"
-
     # Explicitly mention the use of uploaded files in your prompt
     prompt_with_reference = "of the files uploaded, " + file_names_string + "analyze the files you think are most relevant first, then after you analyze, complete the following request and tell me how to add it to my codebase within these files: " + prompt + "don't simplify it and dont give examples. i need the code exactly as intended and how it fits in my current codebase given the context of the existing code"
-
-    # Initialize the chat assistant session
-    # assistant = client.beta.assistants.create(
-    #     # instructions="You are a software engineer. Based on the files in your knowledge, please use them as context and respond with the code to make this new feature request or bug fix given the files . Please include as much code as you can to complete the feature request or bug fix. Don't include any files or links in your response.",
-    #     instructions=instructions,
-    #     name="FeatureTranscribeAI",
-    #     tools=[{"type": "code_interpreter"}],
-    #     model=model,
-    #     # file_ids=file_ids
-    # )
     
     run = client.beta.threads.create_and_run(
         model=model,
@@ -309,13 +266,6 @@ def main(prompt: str, api_key: str, model: str):
     files = upload_files(onlypaths, api_key)
     file_ids = files['file_ids']
     file_names = files['file_names']
-    print("fileidsandnames")
-    print(file_ids)
-    print(file_names)
-
-
-    # Aggregate the selected code segments
-    # aggregated_code = aggregate_code_segments(relevant_code_paths)
 
     relevant_code_paths_with_confidence = [f"Path: {path}, Confidence: {confidence:.2f}" for _, path, confidence in relevant_code_paths]
     
