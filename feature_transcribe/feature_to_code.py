@@ -6,8 +6,40 @@ import requests
 import time
 from sklearn.metrics.pairwise import cosine_similarity
 from openai import OpenAI
+import os
 
 
+def read_assistant_id_from_file(file_path):
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, 'r') as file:
+                data = json.load(file)
+            return data.get('assistant_id')
+        except (IOError, json.JSONDecodeError) as error:
+            print(f"Error reading from {file_path}: {error}")
+    return None
+
+def create_and_store_new_assistant_id(file_path: str, model:str, api_key: str):
+    client = OpenAI(api_key=api_key)
+    try:
+        instructions = "Please provide a coding solution based on the context provided in the uploaded files. Base Your response on the file ids included in the request. your response should include the code i need to copy and paste into my application to solve the request"
+
+        # Initialize the chat assistant session
+        assistant = client.beta.assistants.create(
+            # instructions="You are a software engineer. Based on the files in your knowledge, please use them as context and respond with the code to make this new feature request or bug fix given the files . Please include as much code as you can to complete the feature request or bug fix. Don't include any files or links in your response.",
+            instructions=instructions,
+            name="FeatureTranscribeAI",
+            tools=[{"type": "code_interpreter"}],
+            model=model,
+            # file_ids=file_ids
+        )
+        assistant_id = assistant.id
+        with open(file_path, 'w') as file:
+            json.dump({'assistant_id': assistant_id}, file)
+        return assistant_id
+    except Exception as error:
+        print(f"Error creating new OpenAI Assistant: {error}")
+    return None
 
 def load_embeddings_with_code(file_path):
     """Load embeddings and corresponding file paths from a JSON file."""
@@ -78,9 +110,6 @@ def feature_to_code_segments(embeddings, paths, new_feature_embedding, top_n=15)
 
     return relevant_codes_paths
 
-
-
-
 def aggregate_code_segments(relevant_code_paths):
     """Aggregate selected code segments into a single coherent context."""
     aggregated_code = '\n\n'.join([code for code, _, _ in relevant_code_paths])
@@ -116,7 +145,7 @@ def aggregate_code_segments(relevant_code_paths):
 #     print(result)
 #     return result.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
 
-def make_openai_request(prompt, paths, api_key, model="gpt-3.5-turbo", max_tokens=1000):
+def make_openai_request(assistant_id, prompt, paths, api_key, model="gpt-3.5-turbo", max_tokens=1000):
     client = OpenAI(api_key=api_key)
 
     # Initialize a list to store file IDs
@@ -142,24 +171,24 @@ def make_openai_request(prompt, paths, api_key, model="gpt-3.5-turbo", max_token
     file_names_string = ",".join(file_names)
 
     # Clear and concise instructions
-    instructions = "Please provide a coding solution based on the context provided in the uploaded files. Base Your response on the file ids included in the request. your response should include the code i need to copy and paste into my application to solve the request"
+    # instructions = "Please provide a coding solution based on the context provided in the uploaded files. Base Your response on the file ids included in the request. your response should include the code i need to copy and paste into my application to solve the request"
 
     # Explicitly mention the use of uploaded files in your prompt
-    prompt_with_reference = "of the files uploaded, " + file_names_string + "analyze the files you think are most relevant first, then after you analyze, complete the following request and tell me how to add it to my codebase within these files: " + prompt + "don't simplify it and dont give examples. i need the code exactly as intended"
+    prompt_with_reference = "of the files uploaded, " + file_names_string + "analyze the files you think are most relevant first, then after you analyze, complete the following request and tell me how to add it to my codebase within these files: " + prompt + "don't simplify it and dont give examples. i need the code exactly as intended and how it looks in my current codebase"
 
     # Initialize the chat assistant session
-    assistant = client.beta.assistants.create(
-        # instructions="You are a software engineer. Based on the files in your knowledge, please use them as context and respond with the code to make this new feature request or bug fix given the files . Please include as much code as you can to complete the feature request or bug fix. Don't include any files or links in your response.",
-        instructions=instructions,
-        name="FeatureTranscribeAI",
-        tools=[{"type": "code_interpreter"}],
-        model=model,
-        # file_ids=file_ids
-    )
+    # assistant = client.beta.assistants.create(
+    #     # instructions="You are a software engineer. Based on the files in your knowledge, please use them as context and respond with the code to make this new feature request or bug fix given the files . Please include as much code as you can to complete the feature request or bug fix. Don't include any files or links in your response.",
+    #     instructions=instructions,
+    #     name="FeatureTranscribeAI",
+    #     tools=[{"type": "code_interpreter"}],
+    #     model=model,
+    #     # file_ids=file_ids
+    # )
     
     run = client.beta.threads.create_and_run(
         model=model,
-        assistant_id=assistant.id,
+        assistant_id=assistant_id,
         thread={
             "messages": [
                 {
@@ -295,12 +324,24 @@ def main(prompt: str, api_key: str, model: str):
     relevant_code_paths_with_confidence = [f"Path: {path}, Confidence: {confidence:.2f}" for _, path, confidence in relevant_code_paths]
     
     prompt_response = make_openai_request_for_prompt(prompt, api_key, model)
-    response_text = make_openai_request(prompt_response, onlypaths, api_key, model)
 
-    return {
-        'relevant_code_paths': relevant_code_paths_with_confidence,
-        'response': response_text
-    }
+    file_path = 'assistant_id.json'
+    assistant_id = read_assistant_id_from_file(file_path)
+
+    if not assistant_id:
+        assistant_id = create_and_store_new_assistant_id(file_path, model, api_key)
+
+    if assistant_id:
+        response_text = make_openai_request(assistant_id, prompt_response, onlypaths, api_key, model)
+
+        return {
+            'relevant_code_paths': relevant_code_paths_with_confidence,
+            'response': response_text
+        }
+    else:
+        print("Failed to obtain a valid Assistant ID.")
+        
+    
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process files to generate embeddings.")
@@ -314,4 +355,3 @@ if __name__ == "__main__":
     model = args.model
 
     main(prompt, api_key, model)
-
