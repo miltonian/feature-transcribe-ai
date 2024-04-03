@@ -145,7 +145,7 @@ def make_openai_request(prompt, paths, api_key, model="gpt-3.5-turbo", max_token
     instructions = "Please provide a coding solution based on the context provided in the uploaded files. Base Your response on the file ids included in the request. your response should include the code i need to copy and paste into my application to solve the request"
 
     # Explicitly mention the use of uploaded files in your prompt
-    prompt_with_reference = "of the files uploaded, " + file_names_string + "analyze the files you think are most relevant first, then after you analyze, complete the following request and tell me how to add it to my codebase within these files: " + prompt
+    prompt_with_reference = "of the files uploaded, " + file_names_string + "analyze the files you think are most relevant first, then after you analyze, complete the following request and tell me how to add it to my codebase within these files: " + prompt + "don't simplify it and dont give examples. i need the code exactly as intended"
 
     # Initialize the chat assistant session
     assistant = client.beta.assistants.create(
@@ -197,9 +197,8 @@ def make_openai_request_for_prompt(prompt, api_key, model="gpt-3.5-turbo", max_t
         - Increase Detail in Prompts: Provide more detailed prompts that focus on the specific aspect of the code or logic you're interested in. This can help guide the model's attention to the relevant parts of the files.
         - Break Down the Problem: Instead of asking for an analysis of the entire file or a large block of code, break down your request into smaller, more manageable questions that focus on specific functions, methods, or logic flows.
         - Provide Context: Along with the code, include explanations or comments within your prompt that highlight the key areas of interest or specific functionalities you need help with. This can help the model better understand the context and provide more targeted insights.
-        - Iterative Querying: Use an iterative approach where you start with a general inquiry and then drill down based on the model's responses. This can help uncover more detailed and specific insights over multiple interactions.
         
-        and below is the feature description i want you to improve:
+        and below is the feature description i want you to give me a prompt for openai to give me code for:
         
         {prompt}
     """
