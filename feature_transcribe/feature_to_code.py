@@ -22,7 +22,7 @@ def read_assistant_id_from_file(file_path):
 def create_and_store_new_assistant_id(file_path: str, model:str, api_key: str):
     client = OpenAI(api_key=api_key)
     try:
-        instructions = "Please provide a coding solution based on the context provided in the uploaded files. Base Your response on the files included in the request. your response should include the code i need to copy and paste into my application to solve the request. when referencing files, don't reference the ids, reference the names. if you need to do a deeper analysis of the code in certain files, please do so so you can best fulfill the request"
+        instructions = "Please provide a coding solution based on the context provided in the uploaded files. Base Your response on the files included in the request. your response should include the code i need to copy and paste into my application to solve the request. when referencing files, don't reference the ids, reference the names. if you need to do a deeper analysis of the code in certain files, please do so so you can best fulfill the request. yes, you have direct access to the content of these files and can analyze the deeply enough to fit the code you provide nicely into the existing files themselves. language of the code should match the language of files given"
 
         # Initialize the chat assistant session
         assistant = client.beta.assistants.create(
@@ -161,7 +161,7 @@ def send_message_to_assistant(assistant_id, message, file_ids, api_key, model="g
 
     # Wait for the thread run to complete, checking periodically
     attempts = 0
-    max_attempts = 120
+    max_attempts = 180
     while attempts < max_attempts and not run.completed_at:
         time.sleep(1)
         run = client.beta.threads.runs.retrieve(thread_id=run.thread_id, run_id=run.id)
@@ -186,7 +186,7 @@ def make_openai_request_for_prompt(prompt, api_key, model="gpt-3.5-turbo", max_t
         - Break Down the Problem: Instead of asking for an analysis of the entire file or a large block of code, break down your request into smaller, more manageable questions that focus on specific functions, methods, or logic flows.
         - Provide Context: Along with the code, include explanations or comments within your prompt that highlight the key areas of interest or specific functionalities you need help with. This can help the model better understand the context and provide more targeted insights.
         
-        and below is the feature description i want you to give me a prompt for openai to give me code for:
+        and below is the feature description i want you to give me a prompt for openai to give me code for exactly how i should put it in my file(s):
         
         {prompt}
     """
@@ -260,12 +260,37 @@ def main(prompt: str, api_key: str, model: str):
         file_names_string = ",".join(file_names)
 
         # Explicitly mention the use of uploaded files in your prompt
-        prompt_with_reference = "of the files uploaded, " + file_names_string + "analyze the files you think are most relevant first, then after you analyze, complete the following request and tell me how to add it to my codebase within these files: " + prompt_response + "don't simplify it and dont give examples. i need the code exactly as intended and how it fits in my current codebase given the context of the existing code. if you need to do a deeper analysis of the code in certain files, please do so so you can best fulfill the request"
+        breakdown_prompt = f"""
+        of the files uploaded, " + file_names_string + "analyze the files you think are most relevant first, then after you analyze, breakdown the series of steps as if to prompt chatgpt to then complete the task that is requested here: {prompt_response} don't simplify it and dont give examples. i need the code exactly as intended and how it fits in my current codebase given the context of the existing code. if you need to do a deeper analysis of the code in certain files, please do so so you can best fulfill the request. also, adhere to these principles: To enhance the efficiency and clarity of your prompt for a more streamlined and focused analysis, you can consider the following improvements:
+
+        Specificity in File Descriptions: Start by providing a brief description of each file, including its programming language, purpose (e.g., implementing endpoints, testing, configuration), and any specific sections or functionalities you are particularly interested in. This helps in prioritizing files and sections of code that are most relevant to your query.
+
+        Highlight Key Endpoints: Clearly state the endpoints or functionalities you are focusing on, including any specific requirements or behaviors expected from these endpoints. If you are looking for improvements or have encountered issues, describe these in detail to direct the analysis towards solving these specific problems.
+
+        Mention Relevant Technologies and Frameworks: If your project uses specific frameworks (like Express.js for Node.js applications), libraries, or technologies, mention these upfront. Knowing the technology stack helps in tailoring the analysis to the conventions and best practices of those technologies.
+
+        Request for Structured Code Analysis: If you're interested in specific types of analysis (e.g., code optimization, security best practices, error handling improvements), mention this explicitly. It allows the analysis to focus on these aspects within the context of your provided code.
+
+        Prioritization of Files or Code Sections: If you have an idea of which files might be more relevant based on their content size, naming, or known functionalities, list these files in the order of priority. This helps in focusing the analysis efforts on the most promising files first.
+
+        Inclusion of Related Files or Code Snippets: If there are dependencies between files or if a particular piece of code is spread across multiple files, make a note of these relationships. Understanding how different parts of your codebase interact can be crucial for a comprehensive analysis.
+
+        Use of Code Comments for Guidance: If possible, include comments in your code or provide annotations in your prompt about specific areas of interest or concern. This can guide the analysis directly to the relevant portions of code.
+
+        Clarity on Desired Outcomes: Clearly articulate what you hope to achieve with the analysis, such as identifying inefficiencies, improving performance, or fixing bugs. This helps in aligning the analysis with your goals.
+    """
         
-        response_text = send_message_to_assistant(assistant_id, prompt_with_reference, file_ids, api_key, model)
+        # Explicitly mention the use of uploaded files in your prompt
+        breakdown_prompt_response = send_message_to_assistant(assistant_id, breakdown_prompt, file_ids, api_key, model)
+        print("--BREAKDOWN_PROMPT_RESPONSE--")
+        print(breakdown_prompt_response)
+
+        # prompt_with_reference = "of the files uploaded, " + file_names_string + "analyze the files you think are most relevant first, then after you analyze, complete the following request and tell me how to add it to my codebase within these files: " + prompt_response + "don't simplify it and dont give examples. i need the code exactly as intended and how it fits in my current codebase given the context of the existing code. if you need to do a deeper analysis of the code in certain files, please do so so you can best fulfill the request"
+        
+        response_text = send_message_to_assistant(assistant_id, "follow this thought chain and plan: " + breakdown_prompt_response + ". again the modifications or specific operations i need is: " + prompt_response, file_ids, api_key, model)
         print("--initial noncondensed response--")
         print(response_text)
-        condensed_response_prompt = f"take the following response and tell me all of the code that i need to update. condense all of the noncode text to give me just what i need as far as context: {response_text}"
+        condensed_response_prompt = f"take the following response and tell me all of the code that i need to update exactly how it needs to be updated, don't leave any code out and don't give examples or simplify it. i should be able to copy and paste the code and it works. condense all of the noncode text to give me just what i need as far as context: {response_text}. and yes, you have direct access to the content of these files and can analyze the deeply enough to fit the code you provide nicely into the existing files themselves"
         response_text = send_message_to_assistant(assistant_id, condensed_response_prompt, file_ids, api_key, model)
         print("--condensed response--")
         print(response_text)
