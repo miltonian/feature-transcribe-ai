@@ -27,7 +27,7 @@ def is_ignored(path, ignore_patterns, root_directory):
             return True
     return False
 
-def find_files(directory, file_extensions=('.swift', '.ts', '.js', '.tsx', '.jsx', '.py', '.html', '.css', '.scss', '.prisma', '.ex', '.schema'), exclude='Pods'):
+def find_files(directory, file_extensions=('.swift', '.ts', '.js', '.tsx', '.jsx', '.py', '.html', '.css', '.scss', '.prisma', '.ex', '.schema', '.vue', '.vuex'), exclude='Pods'):
     ignore_patterns = parse_gitignore(directory)
     for root, dirs, files in os.walk(directory):
         dirs[:] = [d for d in dirs if not is_ignored(os.path.join(root, d), ignore_patterns, directory)]
