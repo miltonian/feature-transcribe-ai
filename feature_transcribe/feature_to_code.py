@@ -22,16 +22,14 @@ def read_assistant_id_from_file(file_path):
 def create_and_store_new_assistant_id(file_path: str, model:str, api_key: str):
     client = OpenAI(api_key=api_key)
     try:
-        instructions = "Please provide a coding solution based on the context provided in the uploaded files. Base Your response on the files included in the request. your response should include the code i need to copy and paste into my application to solve the request. when referencing files, don't reference the ids, reference the names. if you need to do a deeper analysis of the code in certain files, please do so so you can best fulfill the request. yes, you have direct access to the content of these files and can analyze the deeply enough to fit the code you provide nicely into the existing files themselves. language of the code should match the language of files given"
+        instructions = "You are a principal software engineer. Please provide the entire coding solution based on the context provided in the uploaded files. Base your response on the files included in the request. your response should include all of the exact code i need to copy and paste into my application to solve the request. when referencing files, don't reference the ids, reference the names. if you need to do a deeper analysis of the code in certain files, please do so so you can best fulfill the request. yes, you have direct access to the content of these files and can analyze the deeply enough to fit the code you provide nicely into the existing files themselves. language of the code should match the language of files given. and yes, you have direct access to the content of these files and can analyze them deeply. yes you have access to external content directly"
 
         # Initialize the chat assistant session
         assistant = client.beta.assistants.create(
-            # instructions="You are a software engineer. Based on the files in your knowledge, please use them as context and respond with the code to make this new feature request or bug fix given the files . Please include as much code as you can to complete the feature request or bug fix. Don't include any files or links in your response.",
             instructions=instructions,
             name="FeatureTranscribeAI",
             tools=[{"type": "code_interpreter"}],
-            model=model,
-            # file_ids=file_ids
+            model=model
         )
         assistant_id = assistant.id
         with open(file_path, 'w') as file:
@@ -181,15 +179,13 @@ def make_openai_request_for_prompt(prompt, api_key, model="gpt-3.5-turbo", max_t
 
     # Clear and concise instructions
     instructions = f"""
-    heres the feature description i'm giving openai along with the relevant files. give me a better prompt from this that uses the following strategies below. only return the prompt for me. nothing else.
-        - Increase Detail in Prompts: Provide more detailed prompts that focus on the specific aspect of the code or logic you're interested in. This can help guide the model's attention to the relevant parts of the files.
-        - Break Down the Problem: Instead of asking for an analysis of the entire file or a large block of code, break down your request into smaller, more manageable questions that focus on specific functions, methods, or logic flows.
-        - Provide Context: Along with the code, include explanations or comments within your prompt that highlight the key areas of interest or specific functionalities you need help with. This can help the model better understand the context and provide more targeted insights.
+    I'm enhancing my project with a new feature and need targeted coding assistance for seamless integration.  Translate this feature description into a prompt for chatgpt using open ai's prompt documentation. your response should include only the prompt i can copy and paste
         
-        and below is the feature description i want you to give me a prompt for openai to give me code for exactly how i should put it in my file(s):
+        Feature Description:
         
         {prompt}
     """
+    
 
     completion = client.chat.completions.create(
         model=model,
@@ -248,7 +244,7 @@ def main(prompt: str, api_key: str, model: str):
 
     relevant_code_paths_with_confidence = [f"Path: {path}, Confidence: {confidence:.2f}" for _, path, confidence in relevant_code_paths]
     
-    prompt_response = make_openai_request_for_prompt(prompt, api_key, model)
+    # prompt_response = make_openai_request_for_prompt(prompt, api_key, model)
 
     file_path = 'assistant_id.json'
     assistant_id = read_assistant_id_from_file(file_path)
@@ -258,42 +254,94 @@ def main(prompt: str, api_key: str, model: str):
 
     if assistant_id:
         file_names_string = ",".join(file_names)
-
-        # Explicitly mention the use of uploaded files in your prompt
-        breakdown_prompt = f"""
-        of the files uploaded, {file_names_string} analyze the files you think are most relevant first, then after you analyze, breakdown the series of steps as if to prompt chatgpt to then complete the task that is requested here: {prompt_response} don't simplify it and dont give examples. i need the code exactly as intended and how it fits in my current codebase given the context of the existing code. if you need to do a deeper analysis of the code in certain files, please do so so you can best fulfill the request. also, adhere to these principles: To enhance the efficiency and clarity of your prompt for a more streamlined and focused analysis, you can consider the following improvements:
-
-        Specificity in File Descriptions: Start by providing a brief description of each file, including its programming language, purpose (e.g., implementing endpoints, testing, configuration), and any specific sections or functionalities you are particularly interested in. This helps in prioritizing files and sections of code that are most relevant to your query.
-
-        Highlight Key Endpoints: Clearly state the endpoints or functionalities you are focusing on, including any specific requirements or behaviors expected from these endpoints. If you are looking for improvements or have encountered issues, describe these in detail to direct the analysis towards solving these specific problems.
-
-        Mention Relevant Technologies and Frameworks: If your project uses specific frameworks (like Express.js for Node.js applications), libraries, or technologies, mention these upfront. Knowing the technology stack helps in tailoring the analysis to the conventions and best practices of those technologies.
-
-        Request for Structured Code Analysis: If you're interested in specific types of analysis (e.g., code optimization, security best practices, error handling improvements), mention this explicitly. It allows the analysis to focus on these aspects within the context of your provided code.
-
-        Prioritization of Files or Code Sections: If you have an idea of which files might be more relevant based on their content size, naming, or known functionalities, list these files in the order of priority. This helps in focusing the analysis efforts on the most promising files first.
-
-        Inclusion of Related Files or Code Snippets: If there are dependencies between files or if a particular piece of code is spread across multiple files, make a note of these relationships. Understanding how different parts of your codebase interact can be crucial for a comprehensive analysis.
-
-        Use of Code Comments for Guidance: If possible, include comments in your code or provide annotations in your prompt about specific areas of interest or concern. This can guide the analysis directly to the relevant portions of code.
-
-        Clarity on Desired Outcomes: Clearly articulate what you hope to achieve with the analysis, such as identifying inefficiencies, improving performance, or fixing bugs. This helps in aligning the analysis with your goals.
-    """
         
-        # Explicitly mention the use of uploaded files in your prompt
-        breakdown_prompt_response = send_message_to_assistant(assistant_id, breakdown_prompt, file_ids, api_key, model)
+        prompt1 = f"""
+            given the following prompt structure, please replace what is wrapped in brackets [] and anything else that seems relevant given the uploaded files and feature description, after you replace it i will send it to chatgpt. so this is meant to be a prompt. it is important that your response is a prompt i can give to chatgpt:
+            
+            I am seeking to enhance my project by integrating a new feature. For this, I require executable code samples that demonstrate how to implement this feature within my existing codebase. The solution should cover everything from setup, integration, to final testing, with code snippets provided for each step.
+
+            Feature to Implement: [Detailed feature description]
+
+            The files I've uploaded include: {file_names_string}
+            Please review these files to understand how they contribute to the project and to locate the code snippets that are most relevant to [the specific aspects you're interested in].
+
+            System Architecture and Existing Code:
+            - Language: describe what programming language, or languages this project uses
+
+            Define a code snippet as relevant if it:
+            - Directly contributes to [specific feature or functionality].
+            - Interacts with [specific component or technology].
+            - Implements a solution to [specific problem or challenge].
+            - Specifically referenced from other relevant code 
+
+            After identifying the relevant code snippets, please:
+            - Extract and present them clearly.
+            - Provide a brief analysis of each snippet, explaining its purpose and functionality within the context of the files.
+            - Highlight any dependencies or external modules they rely on.
+                        
+            Priority for Response:
+            - Please prioritize providing executable code snippets over theoretical explanations. The code should be detailed enough to be directly integrated into my existing project, complete with comments to guide the integration process.
+
+            Integration Instructions:
+            - Based on the extracted code snippets, offer guidance on how they can be integrated or modified to work within the broader context of my project, particularly focusing on [any specific integration challenges or requirements].
+
+            Output Format:
+            - The response should be formatted as executable code snippets, ready to be copied and pasted into my project. Comments should be included to explain the purpose of code sections and their intended integration points.
+
+            Please format your response to include each relevant code snippet followed by its analysis and integration advice. If you encounter code in languages like [specify any languages], focus particularly on those, as they are most critical to my project
+
+            FEATURE DESCRIPTION: {prompt}
+        """
+        # STEP 1: break down the request into actionable steps to take 
+        breakdown_prompt_response = send_message_to_assistant(assistant_id, prompt1, file_ids, api_key, model)
         print("--BREAKDOWN_PROMPT_RESPONSE--")
         print(breakdown_prompt_response)
-
-        # prompt_with_reference = "of the files uploaded, " + file_names_string + "analyze the files you think are most relevant first, then after you analyze, complete the following request and tell me how to add it to my codebase within these files: " + prompt_response + "don't simplify it and dont give examples. i need the code exactly as intended and how it fits in my current codebase given the context of the existing code. if you need to do a deeper analysis of the code in certain files, please do so so you can best fulfill the request"
         
-        response_text = send_message_to_assistant(assistant_id, "follow this thought chain and plan: " + breakdown_prompt_response + ". again the modifications or specific operations i need is: " + prompt_response, file_ids, api_key, model)
-        print("--initial noncondensed response--")
+        # STEP 2: get the code from the prompt above
+        response_text = send_message_to_assistant(assistant_id, breakdown_prompt_response, file_ids, api_key, model)
+        print("--CODE RESPONSE--")
         print(response_text)
-        condensed_response_prompt = f"take the following response and tell me all of the code that i need to update exactly how it needs to be updated, don't leave any code out and don't give examples or simplify it. i should be able to copy and paste the code and it works. condense all of the noncode text to give me just what i need as far as context: {response_text}. and yes, you have direct access to the content of these files and can analyze the deeply enough to fit the code you provide nicely into the existing files themselves"
-        response_text = send_message_to_assistant(assistant_id, condensed_response_prompt, file_ids, api_key, model)
-        print("--condensed response--")
-        print(response_text)
+
+        # step 1 old prompt
+        # Specificity in File Descriptions: Start by providing a brief description of each file, including its programming language, purpose (e.g., implementing endpoints, testing, configuration), and any specific sections or functionalities you are particularly interested in. This helps in prioritizing files and sections of code that are most relevant to your query.
+
+        # Highlight Key Endpoints: Clearly state the endpoints or functionalities you are focusing on, including any specific requirements or behaviors expected from these endpoints. If you are looking for improvements or have encountered issues, describe these in detail to direct the analysis towards solving these specific problems.
+
+        # Mention Relevant Technologies and Frameworks: If your project uses specific frameworks (like Express.js for Node.js applications), libraries, or technologies, mention these upfront. Knowing the technology stack helps in tailoring the analysis to the conventions and best practices of those technologies.
+
+        # Request for Structured Code Analysis: If you're interested in specific types of analysis (e.g., code optimization, security best practices, error handling improvements), mention this explicitly. It allows the analysis to focus on these aspects within the context of your provided code.
+
+        # Prioritization of Files or Code Sections: If you have an idea of which files might be more relevant based on their content size, naming, or known functionalities, list these files in the order of priority. This helps in focusing the analysis efforts on the most promising files first.
+
+        # Inclusion of Related Files or Code Snippets: If there are dependencies between files or if a particular piece of code is spread across multiple files, make a note of these relationships. Understanding how different parts of your codebase interact can be crucial for a comprehensive analysis.
+
+        # Use of Code Comments for Guidance: If possible, include comments in your code or provide annotations in your prompt about specific areas of interest or concern. This can guide the analysis directly to the relevant portions of code.
+
+        # Clarity on Desired Outcomes: Clearly articulate what you hope to achieve with the analysis, such as identifying inefficiencies, improving performance, or fixing bugs. This helps in aligning the analysis with your goals.
+
+        # # STEP 1: break down the request into actionable steps to take 
+        # # breakdown_prompt = f"""
+        # # of the files uploaded, {file_names_string} analyze the files you think are most relevant first, then after you analyze, break down the series of simple steps as if to prompt chatgpt to provide the complete code for each step without simplifying the code or giving examples, the code should be exactly as intended so i can copy and paste where it perfectly fits into my existing code: {prompt_response}. if you need to do a deeper analysis of the code in certain files, please do so so you can best fulfill the request. also, adhere to these principles:
+        # # """
+        # breakdown_prompt = f"""
+        # Identify the key functionalities and algorithms within the uploaded files {file_names_string} that are crucial for {prompt_response}. Provide the exact code snippets needed for these functionalities. and yes, you have direct access to the content of these files and can analyze them deeply. yes you have access to external content directly
+        # """
+        # breakdown_prompt_response = send_message_to_assistant(assistant_id, breakdown_prompt, file_ids, api_key, model)
+        # print("--BREAKDOWN_PROMPT_RESPONSE--")
+        # print(breakdown_prompt_response)
+        
+        # # STEP 2: send the broken down prompt to the assistants api 
+        # # response_text = send_message_to_assistant(assistant_id, "follow this chain of thought and translate this into all of the code i would need to copy and paste into my application perfectly fitting in my existing code: " + breakdown_prompt_response + ". again the modifications or specific operations i need is: " + prompt_response, file_ids, api_key, model)
+        # code_prompt = f"Based on this analysis, provide the precise code necessary to implement the identified functionalities in my existing project. The code should be ready to use without further modification. analysis here: {breakdown_prompt_response}. and yes, you have direct access to the content of these files and can analyze them deeply. yes you have access to external content directly"
+        # response_text = send_message_to_assistant(assistant_id, code_prompt, file_ids, api_key, model)
+        # print("--initial noncondensed response--")
+        # print(response_text)
+        
+        # # # STEP 3: take the code and everything else in the step 2 response and condense it down to only the essentials
+        # # condensed_response_prompt = f"take the following response and tell me all of the code that i need to update exactly how it needs to be updated, don't leave any code out and don't give examples or simplify it. i should be able to copy and paste the code and it works. condense all of the noncode text to give me just what i need as far as context: {response_text}. and yes, you have direct access to the content of these files and can analyze the deeply enough to fit the code you provide nicely into the existing files themselves. fill in any code that is missing that i absolutely need to copy and paste into my files"
+        # # response_text = send_message_to_assistant(assistant_id, condensed_response_prompt, file_ids, api_key, model)
+        # # print("--condensed response--")
+        # # print(response_text)
 
     else:
         print("Failed to obtain a valid Assistant ID.")
