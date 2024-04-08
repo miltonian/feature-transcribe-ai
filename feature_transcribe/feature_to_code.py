@@ -2,12 +2,14 @@ import argparse
 from feature_transcribe.openai_api import generate_embedding
 import numpy as np
 import json
-import requests
 import time
 from sklearn.metrics.pairwise import cosine_similarity
 from openai import OpenAI
+import google.generativeai as genai
 import os
-
+from IPython.display import Markdown
+import textwrap
+from feature_transcribe.code_parser import parse_swift_file, parse_code, parse_ts_js_code
 
 def read_assistant_id_from_file(file_path):
     if os.path.exists(file_path):
@@ -47,16 +49,13 @@ def load_embeddings_with_code(file_path):
     embeddings = []
     paths = []
     for item in data:
-        # Use .get() to safely access 'embedding', defaulting to None if not found
         embedding = item.get('embedding')
 
-        # Skip the item if 'embedding' is falsey
         if not embedding:
             continue
 
         embeddings.append(embedding)
-        paths.append(item['path'])  # Assuming 'path' key always exists
-        # components.append(item['component'])  # Assuming 'component' key always exists
+        paths.append(item['path'])  
 
     return np.array(embeddings), paths
 
@@ -79,6 +78,24 @@ def load_new_feature_embedding(file_path):
     embedding = np.array(data['embedding'])  # Extract and convert the embedding to a numpy array
     return description, embedding
 
+def find_relevance(embeddings, codes, new_feature_embedding, top_n=15):
+    # Calculate cosine similarity
+    similarities = cosine_similarity(new_feature_embedding.reshape(1, -1), embeddings)[0]
+   
+    # Calculate mean and standard deviation of similarities
+    mean_similarity = np.mean(similarities)
+    std_dev_similarity = np.std(similarities)
+
+    # Adjust the threshold more selectively based on distribution
+    dynamic_confidence_threshold = mean_similarity + (3 * std_dev_similarity)
+
+    # Filter indices by dynamic threshold
+    high_confidence_indices = [i for i, similarity in enumerate(similarities) ]
+
+    # Sort high-confidence indices by similarity, then select top N
+    relevant_indices = sorted(high_confidence_indices, key=lambda i: similarities[i], reverse=True)[:top_n]
+    return [codes[i] for i in relevant_indices]
+    
 def feature_to_code_segments(embeddings, paths, new_feature_embedding, top_n=15):
     # Calculate cosine similarity
     similarities = cosine_similarity(new_feature_embedding.reshape(1, -1), embeddings)[0]
@@ -140,22 +157,34 @@ def upload_files(paths, api_key):
         'file_names': file_names
     }
         
-def send_message_to_assistant(assistant_id, message, file_ids, api_key, model="gpt-3.5-turbo", max_tokens=1000):
+def send_message_to_assistant(assistant_id, message, file_ids, api_key, thread_id, model="gpt-3.5-turbo", max_tokens=1000):
     client = OpenAI(api_key=api_key)
     
-    run = client.beta.threads.create_and_run(
-        model=model,
-        assistant_id=assistant_id,
-        thread={
-            "messages": [
-                {
-                    "role": "user",
-                    "content": message,
-                    "file_ids": file_ids 
-                }
-            ]
-        }
-    )
+    if thread_id:
+        message = client.beta.threads.messages.create(
+            thread_id=thread_id,
+            role="user",
+            content= message
+        )
+        run =  client.beta.threads.runs.create(
+            thread_id=thread_id,
+            model=model,
+            assistant_id=assistant_id
+        )
+    else: 
+        run = client.beta.threads.create_and_run(
+            model=model,
+            assistant_id=assistant_id,
+            thread={
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": message,
+                        "file_ids": file_ids 
+                    }
+                ]
+            }
+        )
 
     # Wait for the thread run to complete, checking periodically
     attempts = 0
@@ -170,7 +199,10 @@ def send_message_to_assistant(assistant_id, message, file_ids, api_key, model="g
         # Retrieve and aggregate all "assistant" messages
         thread_messages = client.beta.threads.messages.list(run.thread_id)
         assistant_messages = get_system_message_content(thread_messages)
-        return assistant_messages
+        return {
+            "message": assistant_messages,
+            "thread_id": run.thread_id
+        }
     else:
         return "The run did not complete in time."
 
@@ -216,33 +248,239 @@ def get_system_message_content(response):
     combined_message = "\n\n".join([msg[1] for msg in assistant_messages_with_timestamps])
     return combined_message
 
+def to_markdown(text):
+  text = text.replace('•', '  *')
+  return Markdown(textwrap.indent(text, '> ', predicate=lambda _: True))
 
-def main(prompt: str, api_key: str, model: str):
-    """
-    Main function to generate embedding for the feature, 
-
-    Parameters:
-    - feature (str): Feature request / issue.
-    - api_key (str): OpenAI API key for generating embeddings.
-    - model (str): OpenAI model used for generating embeddings.
-    """
+def prompt_gemini(prompt: str, paths, api_key, model):
+    api_key="AIzaSyC53YxgGDam8_r1UqhGP9QGgMGLk8DTCGw"
+    codes = load_code_from_paths(paths)
+    code = "\n".join(codes)
     
-    new_feature_embedding = generate_embedding(prompt, api_key)
-    new_feature_embedding = np.array(new_feature_embedding)
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel('gemini-pro')
+    response = model.generate_content(f"""
+        You are a principal software engineer. Please provide the entire coding solution based on the context provided in the uploaded code. Base your response on the files included in the request. your response should include all of the exact code i need to copy and paste into my application to solve the request. please do so so you can best fulfill the request. yes, you have direct access to the content of these files and can analyze the deeply enough to fit the code you provide nicely into the existing code: 
+        {prompt}
+        
+        And here is my existing code:
+        {code}
+    """)
+    
+    print("--GEMINI RESPONSE--")
+    print(response.text)
+    
+    return response.text # to_markdown(response.text)
+    
+def extract_python_code_blocks(input_string):
+    start_marker = "```python"
+    end_marker = "```"
+    code_blocks = []
+    
+    start_pos = input_string.find(start_marker)
+    while start_pos != -1:
+        # Adjust start position to get the actual start of the code
+        adjusted_start_pos = start_pos + len(start_marker)
+        # Find the end marker from the adjusted start position
+        end_pos = input_string.find(end_marker, adjusted_start_pos)
+        
+        # If the end marker is found, extract the code block
+        if end_pos != -1:
+            code_block = input_string[adjusted_start_pos:end_pos].strip()
+            code_blocks.append(code_block)
+            # Move past this block for the next iteration
+            start_pos = input_string.find(start_marker, end_pos + len(end_marker))
+        else:
+            # If no end marker is found, stop the loop
+            break
+    
+    return code_blocks
 
-    # Load the embeddings and paths from another JSON (as per your existing structure)
-    embeddings, paths = load_embeddings_with_code('embeddings_output.json')
 
-    # Find the top N most relevant code segments
-    relevant_code_paths = feature_to_code_segments(embeddings, paths, new_feature_embedding, top_n=10)
+# Import necessary libraries
+import re
+from pathlib import Path
+def parse_swift_file(path):
+    # Initialize a dictionary to hold parsed data
+    parsed_data = {'classes': [], 'structs': [], 'functions': [], 'variables': [], 'constants': []}
+    
+    # Read the content of the file
+    with open(path, 'r', encoding='utf-8') as file:
+        content = file.read()
+    
+    # Apply each pattern and populate the parsed_data dictionary
+    for key, pattern in swift_patterns.items():
+        matches = re.findall(pattern, content)
+        if key == 'class':
+            parsed_data['classes'].extend(matches)
+        elif key == 'struct':
+            parsed_data['structs'].extend(matches)
+        elif key == 'function':
+            parsed_data['functions'].extend(matches)
+        elif key == 'variable':
+            parsed_data['variables'].extend(matches)
+        elif key == 'constant':
+            parsed_data['constants'].extend(matches)
 
-    onlypaths = [path for _, path, _ in relevant_code_paths]
+    return parsed_data
+    
+# Define a function to parse Swift files
+def parse_swift_files(file_paths):
+    
+    # Initialize a dictionary to hold parsed data
+    parsed_data = {file_path: {'classes': [], 'structs': [], 'functions': [], 'variables': [], 'constants': []}
+                   for file_path in file_paths}
+    
+    # Iterate over each file path
+    for file_path in file_paths:
+        parsed_data[file_path] = parse_swift_file(file_path)
+        
+    return parsed_data
 
-    files = upload_files(onlypaths, api_key)
+ts_js_patterns = {
+    'class': r'class\s+(\w+)',
+    'interface': r'interface\s+(\w+)',
+    'function': r'function\s+(\w+)|(\w+)\s*\(.*?\)\s*:\s*\w+\s*=>|\w+\s*:\s*function\s*\(.*?\)',
+    'variable': r'(let|var)\s+(\w+)\s*(:\s*[^=]+)?\s*(=\s*[^;]+)?;',
+    'constant': r'const\s+(\w+)\s*(:\s*[^=]+)?\s*(=\s*[^;]+)?;',
+}
+swift_patterns = {
+    'class': r'\bclass\s+\w+',
+    'struct': r'\bstruct\s+\w+',
+    'function': r'\bfunc\s+\w+',
+    'variable': r'\bvar\s+\w+',
+    'constant': r'\blet\s+\w+',
+    # Add more patterns here if needed
+}
+
+def parse_ts_js_code(path: str):
+    file_content = Path(path).read_text()
+    file_results = {
+        'classes': [],
+        'interfaces': [],
+        'functions': [],
+        'variables': [],
+        'constants': []
+    }
+
+    # Search for patterns in the file and capture names and details
+    for key, pattern in ts_js_patterns.items():
+        for match in re.finditer(pattern, file_content):
+            if key in ['class', 'interface', 'function']:
+                name = next((m for m in match.groups() if m), 'anonymous')
+                if key == 'interface':
+                    file_results['interfaces'].append(f'interface {name}')
+                elif key == 'class':
+                    file_results['classes'].append(f'class {name}')
+                else: 
+                    file_results['functions'].append(f'func {name}')
+            else: 
+                groups = match.groups()
+                var_type = groups[0]
+                name = groups[1]
+                type_hint = groups[2] if len(groups) > 2 and groups[2] else ''
+                initial_value = groups[3] if len(groups) > 3 and groups[3] else ''
+                detail = f'{var_type} {name}{type_hint}{initial_value}'
+                if key == 'variable':
+                    file_results['variables'].append(detail.strip())
+                else:  
+                    file_results['constants'].append(detail.strip())
+
+    return file_results
+
+def parse_ts_js_code_paths(file_paths):
+    results = {}
+    for file_path in file_paths:
+        results[file_path] = parse_ts_js_code(file_path)
+
+    return results
+
+# Define a function to extract the code block of a given component from the file content
+
+def extract_code_block(content, component_name):
+
+    # Search for the component declaration
+    start_index = content.find(component_name)
+    if start_index == -1:
+        return None  # Component not found
+
+    # Find the opening brace of the component
+    start_brace_index = content.find('{', start_index)
+    if start_brace_index == -1:
+        return None  # Opening brace not found, unusual case
+
+    # Initialize brace count and iterate through the content to find the matching closing brace
+    brace_count = 1
+    for i in range(start_brace_index + 1, len(content)):
+        if content[i] == '{':
+            brace_count += 1
+        elif content[i] == '}':
+            brace_count -= 1
+            
+        if brace_count == 0:
+            return content[start_index:i + 1]  # Return the component code block
+    return None  # Matching closing brace not found
+
+def extract_relevant_code(path, parsed_data):
+    with open(path, 'r', encoding='utf-8') as file:
+        content = file.read()
+
+        # Initialize a dictionary to hold the extracted code for this file
+        extracted_code = {'structs': [], 'classes': [], 'interfaces': [], 'functions': [], 'variables': [], 'constants': []}
+
+        # Check if file_path exists in parsed_data before proceeding
+        # if path in parsed_data:
+        file_data = parsed_data # [path]  # Reference to the data for this file
+        
+        for class_name in file_data.get('classes', []):
+            class_code = extract_code_block(content, class_name)
+            if class_code:
+                extracted_code['classes'].append(class_code)
+
+        for interface_name in file_data.get('interfaces', []):
+            interface_code = extract_code_block(content, interface_name)
+            if interface_code:
+                extracted_code['interfaces'].append(interface_code)
+
+        for function_name in file_data.get('functions', []):
+            function_code = extract_code_block(content, function_name)
+            if function_code:
+                extracted_code['functions'].append(function_code)
+
+        for variable_name in file_data.get('variables', []):
+            variable_code = extract_code_block(content, variable_name)
+            if variable_code:
+                extracted_code['variables'].append(variable_code)
+
+        for constant_name in file_data.get('constants', []):
+            constant_code = extract_code_block(content, constant_name)
+            if constant_code:
+                extracted_code['constants'].append(constant_code)
+
+        for struct_name in file_data.get('structs', []):
+            struct_code = extract_code_block(content, struct_name)
+            if struct_code:
+                extracted_code['structs'].append(struct_code)
+        # else:
+        #     print(f"Warning: No parsed data available for {path}")
+            
+        return extracted_code
+    
+def extract_relevant_code_paths(file_paths, parsed_data):
+    extracted_code = {}
+
+    for file_path in file_paths:
+        extracted_code[file_path] = extract_relevant_code(file_path, parsed_data)
+
+    return extracted_code
+
+def prompt_open_ai(prompt: str, paths, api_key, model):
+    
+    files = upload_files(paths, api_key)
     file_ids = files['file_ids']
     file_names = files['file_names']
 
-    relevant_code_paths_with_confidence = [f"Path: {path}, Confidence: {confidence:.2f}" for _, path, confidence in relevant_code_paths]
+    
     
     # prompt_response = make_openai_request_for_prompt(prompt, api_key, model)
 
@@ -256,101 +494,177 @@ def main(prompt: str, api_key: str, model: str):
         file_names_string = ",".join(file_names)
         
         prompt1 = f"""
-            given the following prompt structure, please replace what is wrapped in brackets [] and anything else that seems relevant given the uploaded files and feature description, after you replace it i will send it to chatgpt. so this is meant to be a prompt. it is important that your response is a prompt i can give to chatgpt:
+            improve this feature request to be completely full proof as if coming from a product person directly into the hands of a software engineer to develop this feature in code entirely
+
+            respond with the improved request and nothing else.
             
-            I am seeking to enhance my project by integrating a new feature. For this, I require executable code samples that demonstrate how to implement this feature within my existing codebase. The solution should cover everything from setup, integration, to final testing, with code snippets provided for each step.
-
-            Feature to Implement: [Detailed feature description]
-
-            The files I've uploaded include: {file_names_string}
-            Please review these files to understand how they contribute to the project and to locate the code snippets that are most relevant to [the specific aspects you're interested in].
-
-            System Architecture and Existing Code:
-            - Language: describe what programming language, or languages this project uses
-
-            Define a code snippet as relevant if it:
-            - Directly contributes to [specific feature or functionality].
-            - Interacts with [specific component or technology].
-            - Implements a solution to [specific problem or challenge].
-            - Specifically referenced from other relevant code 
-
-            After identifying the relevant code snippets, please:
-            - Extract and present them clearly.
-            - Provide a brief analysis of each snippet, explaining its purpose and functionality within the context of the files.
-            - Highlight any dependencies or external modules they rely on.
-                        
-            Priority for Response:
-            - Please prioritize providing executable code snippets over theoretical explanations. The code should be detailed enough to be directly integrated into my existing project, complete with comments to guide the integration process.
-
-            Integration Instructions:
-            - Based on the extracted code snippets, offer guidance on how they can be integrated or modified to work within the broader context of my project, particularly focusing on [any specific integration challenges or requirements].
-
-            Output Format:
-            - The response should be formatted as executable code snippets, ready to be copied and pasted into my project. Comments should be included to explain the purpose of code sections and their intended integration points.
-
-            Please format your response to include each relevant code snippet followed by its analysis and integration advice. If you encounter code in languages like [specify any languages], focus particularly on those, as they are most critical to my project
-
-            FEATURE DESCRIPTION: {prompt}
+            feature request: {prompt}
         """
+        # prompt1 = f"""
+        #     Identify and list all files within the application related to the [Feature Description] request. Exclude any files not directly contributing to the functionality described in the feature request. Provide a list categorized by 'Relevant' and 'Not Relevant' based on their direct contribution to the feature, without detailing the reasons for classification. Just include the file names under each category.
+
+        #     Feature description:  {prompt}
+        # """
+        # prompt1 = f"""
+        #     Analyze the provided code or files to identify the key components and patterns common to the programming languages represented. Generate a parser script capable of extracting a wide array of code components from files in these languages. The script should be able to recognize and process components such as but not limited to classes, functions, methods, variable declarations, imports, and comments. Determine the most suitable scripting language for the parser based on your analysis of the code files' contents and overall structure. The parser should output the extracted information in a structured JSON format, adaptable for use with an embeddings API. Tailor the output format to ensure it captures the essence and functionality of each code component, including name, type, and relevant details or code snippets. IMPORTANT: your response should be the parsing code only so i can immediately execute on it.
+
+        #     replace any paths like (path/to/your/file) to [[path_to_your_file]]
+        # """
+        # prompt1 = f"""
+        #     Analyze the uploaded files to identify sections relevant to implementing a new feature that [feature description]. Consider elements like [list of keywords/patterns identified that are specific to the programming language detected in these files]. The code is written in [language]. Highlight any parts of the code that may need to be changed or extended to accommodate this feature.
+
+        #     What parts of the code are relevant, and what changes might be needed?
+            
+        #     replace the variables wrapped in brackets with what you deem necessary to answer the question above
+        #     feature description: {prompt}
+
+        # """
         # STEP 1: break down the request into actionable steps to take 
-        breakdown_prompt_response = send_message_to_assistant(assistant_id, prompt1, file_ids, api_key, model)
-        print("--BREAKDOWN_PROMPT_RESPONSE--")
-        print(breakdown_prompt_response)
+        response_text_obj = send_message_to_assistant(assistant_id, prompt1, file_ids, api_key, None, model)
+        response_text = response_text_obj['message']
+        thread_id = response_text_obj['thread_id']
+        print("--PROMPT1 RESPONSE--")
+        print(response_text)
+        print(thread_id)
         
         # STEP 2: get the code from the prompt above
-        response_text = send_message_to_assistant(assistant_id, breakdown_prompt_response, file_ids, api_key, model)
-        print("--CODE RESPONSE--")
+        prompt2 = f"""
+        I am working on adding a new feature to my software project and need your expertise to identify relevant portions of code within the project that might be associated with this feature. The project is complex, with various files including source code, documentation, and configuration files. I'll provide a detailed description of the feature I want to implement and some context about the project. Based on this information, I need you to synthesize a detailed narrative or explanation that captures the essence of this feature and its technical requirements. This narrative will then be used by me to generate an embedding, which in turn will help in searching the project's files for code snippets or modules relevant to this feature.
+
+            Feature Description:
+            {response_text}
+
+            Contextual Information:
+            i have uploaded the project files with this request
+
+            Objective:
+            My objective is to get a detailed narrative from you that encapsulates all technical aspects and requirements of the feature described above. This narrative should be rich in detail and structured in a way that when I generate an embedding from it, the embedding will effectively guide me in identifying all potentially relevant code within the project files related to this feature.
+
+            Your response should include:
+            only the information i would need to then generate an embedding from it. don't include anything else
+        """
+        
+        response_text_obj = send_message_to_assistant(assistant_id, prompt2, file_ids, api_key, thread_id, model)
+        response_text = response_text_obj['message']
+        print("--PROMPT2 RESPONSE--")
         print(response_text)
-
-        # step 1 old prompt
-        # Specificity in File Descriptions: Start by providing a brief description of each file, including its programming language, purpose (e.g., implementing endpoints, testing, configuration), and any specific sections or functionalities you are particularly interested in. This helps in prioritizing files and sections of code that are most relevant to your query.
-
-        # Highlight Key Endpoints: Clearly state the endpoints or functionalities you are focusing on, including any specific requirements or behaviors expected from these endpoints. If you are looking for improvements or have encountered issues, describe these in detail to direct the analysis towards solving these specific problems.
-
-        # Mention Relevant Technologies and Frameworks: If your project uses specific frameworks (like Express.js for Node.js applications), libraries, or technologies, mention these upfront. Knowing the technology stack helps in tailoring the analysis to the conventions and best practices of those technologies.
-
-        # Request for Structured Code Analysis: If you're interested in specific types of analysis (e.g., code optimization, security best practices, error handling improvements), mention this explicitly. It allows the analysis to focus on these aspects within the context of your provided code.
-
-        # Prioritization of Files or Code Sections: If you have an idea of which files might be more relevant based on their content size, naming, or known functionalities, list these files in the order of priority. This helps in focusing the analysis efforts on the most promising files first.
-
-        # Inclusion of Related Files or Code Snippets: If there are dependencies between files or if a particular piece of code is spread across multiple files, make a note of these relationships. Understanding how different parts of your codebase interact can be crucial for a comprehensive analysis.
-
-        # Use of Code Comments for Guidance: If possible, include comments in your code or provide annotations in your prompt about specific areas of interest or concern. This can guide the analysis directly to the relevant portions of code.
-
-        # Clarity on Desired Outcomes: Clearly articulate what you hope to achieve with the analysis, such as identifying inefficiencies, improving performance, or fixing bugs. This helps in aligning the analysis with your goals.
-
-        # # STEP 1: break down the request into actionable steps to take 
-        # # breakdown_prompt = f"""
-        # # of the files uploaded, {file_names_string} analyze the files you think are most relevant first, then after you analyze, break down the series of simple steps as if to prompt chatgpt to provide the complete code for each step without simplifying the code or giving examples, the code should be exactly as intended so i can copy and paste where it perfectly fits into my existing code: {prompt_response}. if you need to do a deeper analysis of the code in certain files, please do so so you can best fulfill the request. also, adhere to these principles:
-        # # """
-        # breakdown_prompt = f"""
-        # Identify the key functionalities and algorithms within the uploaded files {file_names_string} that are crucial for {prompt_response}. Provide the exact code snippets needed for these functionalities. and yes, you have direct access to the content of these files and can analyze them deeply. yes you have access to external content directly
-        # """
-        # breakdown_prompt_response = send_message_to_assistant(assistant_id, breakdown_prompt, file_ids, api_key, model)
-        # print("--BREAKDOWN_PROMPT_RESPONSE--")
-        # print(breakdown_prompt_response)
-        
-        # # STEP 2: send the broken down prompt to the assistants api 
-        # # response_text = send_message_to_assistant(assistant_id, "follow this chain of thought and translate this into all of the code i would need to copy and paste into my application perfectly fitting in my existing code: " + breakdown_prompt_response + ". again the modifications or specific operations i need is: " + prompt_response, file_ids, api_key, model)
-        # code_prompt = f"Based on this analysis, provide the precise code necessary to implement the identified functionalities in my existing project. The code should be ready to use without further modification. analysis here: {breakdown_prompt_response}. and yes, you have direct access to the content of these files and can analyze them deeply. yes you have access to external content directly"
-        # response_text = send_message_to_assistant(assistant_id, code_prompt, file_ids, api_key, model)
-        # print("--initial noncondensed response--")
-        # print(response_text)
-        
-        # # # STEP 3: take the code and everything else in the step 2 response and condense it down to only the essentials
-        # # condensed_response_prompt = f"take the following response and tell me all of the code that i need to update exactly how it needs to be updated, don't leave any code out and don't give examples or simplify it. i should be able to copy and paste the code and it works. condense all of the noncode text to give me just what i need as far as context: {response_text}. and yes, you have direct access to the content of these files and can analyze the deeply enough to fit the code you provide nicely into the existing files themselves. fill in any code that is missing that i absolutely need to copy and paste into my files"
-        # # response_text = send_message_to_assistant(assistant_id, condensed_response_prompt, file_ids, api_key, model)
-        # # print("--condensed response--")
-        # # print(response_text)
 
     else:
         print("Failed to obtain a valid Assistant ID.")
         
-    for file_id in file_ids:
-        try:
-            delete_file(file_id, api_key)
-        except Exception as e:
-            print(f"Error deleting file from Open AI with ID {file_id}: {e}")
+    return response_text
+
+def prompt_open_ai2(prompt: str, code: str, api_key: str, model):
+
+    file_path = 'assistant_id.json'
+    assistant_id = read_assistant_id_from_file(file_path)
+
+    if not assistant_id:
+        assistant_id = create_and_store_new_assistant_id(file_path, model, api_key)
+
+    if assistant_id:
+        
+        prompt1 = f"""
+            in the following code, please provide the exact code snippets i would need to complete the folowing feature request. if you don't have enough information, please analyze the files i have uploaded in the previous message
+            FEATURE DESCRIPTION: {prompt}
+            
+            EXISTING CODE: {code}
+        """
+        
+        # STEP 1: break down the request into actionable steps to take 
+        response_text_obj = send_message_to_assistant(assistant_id, prompt1, [], api_key, None, model)
+        response_text = response_text_obj['message']
+        thread_id = response_text_obj['thread_id']
+        print("--PROMPT1 RESPONSE--")
+        print(response_text)
+        print(thread_id)
+
+    else:
+        print("Failed to obtain a valid Assistant ID.")
+        
+    return response_text
+
+def main(prompt: str, api_key: str, model: str):
+    """
+    Main function to generate embedding for the feature, 
+
+    Parameters:
+    - feature (str): Feature request / issue.
+    - api_key (str): OpenAI API key for generating embeddings.
+    - model (str): OpenAI model used for generating embeddings.
+    """
+
+    # Load the embeddings and paths from another JSON (as per your existing structure)
+    embeddings, paths = load_embeddings_with_code('embeddings_output.json')
+    
+    new_feature_embedding = generate_embedding(prompt, api_key)
+    new_feature_embedding = np.array(new_feature_embedding)
+
+    # Find the top N most relevant code segments
+    relevant_code_paths = feature_to_code_segments(embeddings, paths, new_feature_embedding, top_n=10)
+    paths = [path for _, path, _ in relevant_code_paths]
+    
+    improved_feature_embedding = prompt_open_ai(prompt, paths, api_key, model)
+    new_feature_embedding = generate_embedding(improved_feature_embedding, api_key)
+    new_feature_embedding = np.array(new_feature_embedding)
+
+    relevant_code_paths_with_confidence = [f"Path: {path}, Confidence: {confidence:.2f}" for _, path, confidence in relevant_code_paths]
+
+    embeddings_output = []
+
+    for path in paths:
+        # code_groupings_def = parse_swift_files(paths)
+        extension = path.split('.')[-1].lower()
+            
+        # Define extensions for TypeScript/JavaScript and related types
+        ts_js_variants = {'ts', 'js', 'vue', 'jsx', 'tsx'}
+        # Check the file type and process accordingly
+        if extension in ts_js_variants:
+            code_groupings_def = parse_ts_js_code(path)
+        elif extension == 'swift':
+            code_groupings_def = parse_swift_file(path)
+        else:
+            code_groupings_def = "Unsupported file type"
+
+        extracted_code = extract_relevant_code(path, code_groupings_def)
+
+        interfaces = extracted_code.get("interfaces", [])
+        classes = extracted_code.get("classes", [])
+        variables = extracted_code.get("variables", [])
+        constants = extracted_code.get("constants", [])
+        structs = extracted_code.get("structs", [])
+
+        for interfaces in interfaces:
+            embedding = parse_code(interfaces, interfaces, api_key)
+            embeddings_output.append(embedding)
+        for classes in classes:
+            embedding = parse_code(classes, classes, api_key)
+            embeddings_output.append(embedding)
+        for variables in variables:
+            embedding = parse_code(variables, variables, api_key)
+            embeddings_output.append(embedding)
+        for constants in constants:
+            embedding = parse_code(constants, constants, api_key)
+            embeddings_output.append(embedding)
+        for structs in structs:
+            embedding = parse_code(structs, structs, api_key)
+            embeddings_output.append(embedding)
+        
+    with open("code_embeddings_output.json", 'w') as file:
+        json.dump(embeddings_output, file, indent=4)  
+
+    # Load the embeddings and paths from another JSON (as per your existing structure)
+    embeddings, paths = load_embeddings_with_code('code_embeddings_output.json')
+    print("EMBEDDINGS")
+    print(embeddings)
+    print("PATHS")
+    print(paths)
+    # Find the top N most relevant code segments
+    relevant_code = find_relevance(embeddings, paths, new_feature_embedding, top_n=10)
+    
+    response_text = prompt_open_ai2(prompt, relevant_code, api_key, model)
+    
+    # response_text = prompt_gemini(prompt, paths, api_key, model)
 
     return {
         'relevant_code_paths': relevant_code_paths_with_confidence,

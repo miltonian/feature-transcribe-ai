@@ -7,3 +7,8 @@ utils
 flask
 nltk
 scikit-learn
+google-generativeai
+pathlib
+ipython
+jsonrpcclient
+flask-cors

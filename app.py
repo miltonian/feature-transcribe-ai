@@ -1,8 +1,11 @@
 from flask import Flask, render_template, request, jsonify
 import feature_transcribe.prepare_code as pc
 import feature_transcribe.feature_to_code as frc
+from flask_cors import CORS  # Import CORS
+
 
 app = Flask(__name__)
+CORS(app)
 
 @app.route('/')
 def index():

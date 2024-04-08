@@ -1,7 +1,8 @@
 import argparse
-from feature_transcribe.code_parser import parse_file
+from feature_transcribe.code_parser import parse_swift_file, parse_code, parse_ts_js_code
 from feature_transcribe.utils import find_files
 import json
+from pathlib import Path
 
 def main(directory: str, api_key: str, output_file: str):
     """
@@ -16,8 +17,21 @@ def main(directory: str, api_key: str, output_file: str):
     embeddings_output = []
     for file in find_files(directory):
         print("Processing %s" % file)
-        file_embedding = parse_file(file, api_key)
-        embeddings_output.append(file_embedding)
+        extension = file.split('.')[-1].lower()
+        
+        # Define extensions for TypeScript/JavaScript and related types
+        ts_js_variants = {'ts', 'js', 'vue', 'jsx', 'tsx'}
+        
+        # Check the file type and process accordingly
+        if extension in ts_js_variants:
+            content = parse_ts_js_code(file)
+        elif extension == 'swift':
+            content = parse_swift_file(file)
+        else:
+            content = "Unsupported file type"
+        
+        code_embedding = parse_code(file, json.dumps(content), api_key)
+        embeddings_output.append(code_embedding)
 
     with open(output_file, 'w') as file:
         json.dump(embeddings_output, file, indent=4)  
