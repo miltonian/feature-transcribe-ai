@@ -21,7 +21,7 @@ def main(directory: str, api_key: str, output_file: str):
     current_commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=directory, universal_newlines=True).strip()
     
     changed_files = get_changed_files(directory, last_commit)
-
+    print("changed files: %s" % changed_files)
     # Read the existing embeddings and remove old entries for changed files
     existing_embeddings = read_existing_embeddings(output_file)
     updated_embeddings = remove_old_embeddings_for_changed_files(existing_embeddings, changed_files)
@@ -29,7 +29,7 @@ def main(directory: str, api_key: str, output_file: str):
     # embeddings_output = []
     for file in find_files(directory):
         
-        if file not in changed_files:
+        if last_commit and file not in changed_files:
             print("Skipping unchanged file %s" % file)
             continue
         
@@ -50,16 +50,16 @@ def main(directory: str, api_key: str, output_file: str):
                 print("content %s" % content)
                 code_embedding = parse_code_and_ast(ast, code, api_key)
                 code_embedding['path'] = file
-                updated_embeddings.extend(code_embedding)
+                updated_embeddings.append(code_embedding)
         elif extension == 'swift':
             content = parse_swift_file(file)
             print("content %s" % content)
             code_embedding = parse_code_and_ast(ast, json.dumps(content), api_key)
             code_embedding['path'] = file
-            updated_embeddings.extend(code_embedding)
+            updated_embeddings.append(code_embedding)
         else:
             content = "Unsupported file type"
-
+        
     with open(output_file, 'w') as file:
         json.dump(updated_embeddings, file, indent=4)  
 

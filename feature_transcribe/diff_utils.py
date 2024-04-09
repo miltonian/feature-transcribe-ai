@@ -31,7 +31,9 @@ def get_changed_files(directory: str, from_commit: str, to_commit: str = 'HEAD')
     """Returns a list of files that have changed between two commits."""
     command = ['git', 'diff', '--name-only', from_commit, to_commit] if from_commit else ['git', 'ls-files', '--others', '--exclude-standard']
     changed_files = subprocess.check_output(command, cwd=directory, universal_newlines=True)
-    return changed_files.strip().split('\n')
+    changed_files = changed_files.strip().split('\n')
+    changed_files = [directory + "/" + f for f in changed_files]
+    return changed_files
 
 def get_untracked_files(directory: str) -> list:
     """Returns a list of untracked (new) files in the given directory."""
