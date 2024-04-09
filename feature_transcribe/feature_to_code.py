@@ -588,7 +588,7 @@ def main(prompt: str, api_key: str, model: str, top_n=15):
     # print("PATHS")
     # print(paths)
     # Find the top N most relevant code segments
-    relevant_code = find_relevance(embeddings, asts, codes, new_feature_embedding, top_n=5)
+    relevant_code = find_relevance(embeddings, asts, codes, new_feature_embedding, top_n)
 
     response_text = prompt_open_ai2(improved_feature_prompt, relevant_code, api_key, model)
     
