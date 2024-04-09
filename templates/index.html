@@ -11,7 +11,7 @@
         body {
             font-family: 'Manrope', sans-serif;
             margin: 0;
-            padding: 40px;
+            padding: 0;
             background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
             display: flex;
             justify-content: center;
@@ -21,11 +21,12 @@
         }
 
         .container {
-            max-width: 480px;
+            width: 90%; /* Close to full width with a little padding */
+            max-width: 1140px; /* Maximum width to ensure readability */
             background: #fff;
             border-radius: 20px;
             box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
-            padding: 25px;
+            padding: 40px; /* Increased padding for better layout */
             margin: 20px;
             transition: 0.3s ease-in-out;
         }
@@ -35,15 +36,18 @@
             transform: translateY(-10px);
         }
 
+        h1, h2 {
+            text-align: center;
+        }
+
         h1 {
             color: #e09a76;
-            font-size: 2rem;
-            text-align: center;
+            font-size: 2.5rem; /* Slightly larger for better emphasis */
             margin-bottom: 2rem;
         }
 
         h2 {
-            font-size: 1.5rem;
+            font-size: 1.75rem; /* Increased for better hierarchy */
             color: #555;
             margin-bottom: 1.5rem;
         }
@@ -56,21 +60,25 @@
         }
 
         input[type="text"],
-        input[type="submit"] {
-            width: calc(100% - 15px);
+        input[type="submit"],
+        textarea,
+        select {
+            width: 100%; /* Ensure full width */
             padding: 12px 15px;
             margin-bottom: 1rem;
-            border-radius: 12px;
+            border-radius: 8px; /* More modern rounded corners */
             border: 1px solid #ccc;
             transition: all 0.3s;
         }
 
-        input[type="text"] {
+        input[type="text"],
+        textarea {
             background-color: #fafafa;
             border: 2px solid #e2e8f0;
         }
 
-        input[type="text"]:focus {
+        input[type="text"]:focus,
+        textarea:focus {
             outline: none;
             border-color: #e09a76;
             background-color: #fff;
@@ -84,88 +92,37 @@
             font-weight: 600;
         }
 
-        input[type="submit"] {
-            width: 100%;
-        }
-
         input[type="submit"]:hover {
             background-color: #ca8269;
         }
 
-        form:not(:last-child) {
-            margin-bottom: 2rem;
-        }
-
-        * {
-            box-sizing: border-box;
-            /* Apply box-sizing to all elements */
-        }
-
-        /* Add loader CSS */
         .loader {
             border: 16px solid #f3f3f3;
             border-radius: 50%;
             border-top: 16px solid #3498db;
             width: 120px;
             height: 120px;
-            -webkit-animation: spin 2s linear infinite;
             animation: spin 2s linear infinite;
-            display: none;
-            /* Hide by default */
-            margin: 0 auto;
-            /* Center the loader */
-        }
-
-        @-webkit-keyframes spin {
-            0% {
-                -webkit-transform: rotate(0deg);
-            }
-
-            100% {
-                -webkit-transform: rotate(360deg);
-            }
+            display: none; /* Hide by default */
+            margin: 0 auto; /* Center the loader */
         }
 
         @keyframes spin {
             0% {
                 transform: rotate(0deg);
             }
-
             100% {
                 transform: rotate(360deg);
             }
         }
 
-        /* Improve form layout */
-        .form-group {
-            margin-bottom: 1.5rem;
-        }
-
-        /* Uniform button styles */
-        button,
-        input[type="submit"] {
-            background-color: #e09a76;
-            color: #ffffff;
-            border: none;
-            cursor: pointer;
-            font-weight: 600;
-            border-radius: 12px;
-            padding: 10px 20px;
-            transition: background-color 0.3s;
-        }
-
-        button:hover,
-        input[type="submit"]:hover {
-            background-color: #ca8269;
-        }
-
-        /* Additional form success and error messages */
         .success-message,
         .error-message {
             display: none;
             padding: 10px;
             margin-bottom: 20px;
             border-radius: 5px;
+            text-align: center;
         }
 
         #success-message {
@@ -178,21 +135,17 @@
             color: #721c24;
         }
 
-        textarea {
-            padding: 12px 15px;
-            border: 2px solid #e2e8f0;
-            border-radius: 12px;
-            margin-bottom: 1rem;
-            font-family: 'Manrope', sans-serif;
-            font-size: 1rem;
-            background-color: #fafafa;
-            transition: border-color 0.3s ease-in-out;
-        }
-
-        textarea:focus {
-            outline: none;
-            border-color: #e09a76;
-            background-color: #fff;
+        @media (max-width: 768px) {
+            .container {
+                width: 95%; /* Slightly more width for smaller devices */
+                padding: 20px; /* Adjust padding for smaller screens */
+            }
+            h1 {
+                font-size: 2rem; /* Adjust size for smaller screens */
+            }
+            h2 {
+                font-size: 1.5rem;
+            }
         }
     </style>
 </head>
@@ -234,6 +187,20 @@
                     <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
                 </select>
             </div>
+            <div class="form-group">
+                <label for="num_of_embeddings">Embeddings</label>
+                <details>Fewer, less context but less likely to hit a token limit. Greater, more context but more likely to hit a token limit</details>
+                <select id="num_of_embeddings" name="num_of_embeddings">
+                    <option value=5>5</option>
+                    <option value=10>10</option>
+                    <option value=20 selected="selected">20</option>
+                    <option value=30>30</option>
+                    <option value=40>40</option>
+                    <option value=50>50</option>
+                    <option value=50>75</option>
+                    <option value=50>100</option>
+                </select>
+            </div>
             <input type="submit" value="Feature To Code">
             <div id="loadTranscribeForm" class="loader"></div>
             <div id="transcribeForm-success-message" class="success-message">Transcribed feature to code successfully.
@@ -245,6 +212,7 @@
         <div id="response"></div>
         <div id="relevant-code-paths"></div>
     </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.25.0/prism.min.js"></script>
 </body>
 
 <script>
@@ -271,6 +239,22 @@
     function highlightCode(code, language) {
         return Prism.highlight(code, Prism.languages[language], language);
     }
+
+    // Simple Markdown to HTML Converter
+    function markdownToHTML(md) {
+        // Convert line breaks to <br>
+        let html = md.replace(/\n/g, '<br>');
+
+        // Basic handling for code blocks
+        // Matches ```<optional language>\ncode\n```
+        html = html.replace(/```(\w+)?\n([\s\S]+?)```/g, function(match, lang, code) {
+            // For simplicity, ignoring language and just formatting the code block
+            return '<pre>' + code + '</pre>';
+        });
+
+        return html;
+    }
+
     // Modified function to toggle visibility of the loader
     function submitForm(formId, actionUrl, loaderId) {
         document.getElementById(loaderId).style.display = "block"; // Show the loader
@@ -292,6 +276,7 @@
                 if (data.relevant_code_paths) {
                     document.getElementById('relevant-code-paths').innerHTML = "<h3>Relevant Code Paths:</h3><ul>" + data.relevant_code_paths.map(path => '<li>' + path + '</li>').join('') + "</ul><br /><h3>OpenAI API Response:</h3>"
                     document.getElementById('response').innerText = data.response;
+                    // document.getElementById('response').innerHTML = (data.response);
                     // let formattedResponse = formatCodeBlocks(data.response);
                     // document.getElementById('response').innerHTML = data.response;
                 } else {

@@ -22,7 +22,10 @@ def generate_embedding(input_text, api_key):
         "model": "text-embedding-3-small",
         "input": input_text
     }
-    # Make the HTTP request to the OpenAI API and return the JSON response.
-    response = requests.post("https://api.openai.com/v1/embeddings", headers=headers, json=data)
+    try:
+        # Make the HTTP request to the OpenAI API and return the JSON response.
+        response = requests.post("https://api.openai.com/v1/embeddings", headers=headers, json=data)
+        return response.json()['data'][0]['embedding']
+    except:
+        return []
 
-    return response.json()['data'][0]['embedding']

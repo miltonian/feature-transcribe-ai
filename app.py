@@ -30,8 +30,9 @@ def feature_to_code():
     feature = request.form['feature']
     api_key = request.form['api_key']
     model = request.form['model']
+    num_of_embeddings = request.form['num_of_embeddings']
 
-    response = frc.main(feature, api_key, model)
+    response = frc.main(feature, api_key, model, int(num_of_embeddings))
     return jsonify(response)
 
 if __name__ == '__main__':

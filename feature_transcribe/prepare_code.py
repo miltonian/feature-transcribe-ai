@@ -1,5 +1,5 @@
 import argparse
-from feature_transcribe.code_parser import parse_swift_file, parse_code, parse_ts_js_code
+from feature_transcribe.code_parser import parse_swift_file, parse_code, parse_ts_js_code, get_node_ast, parse_tls, parse_code_and_ast
 from feature_transcribe.utils import find_files
 import json
 from pathlib import Path
@@ -24,14 +24,22 @@ def main(directory: str, api_key: str, output_file: str):
         
         # Check the file type and process accordingly
         if extension in ts_js_variants:
-            content = parse_ts_js_code(file)
+            # content = parse_ts_js_code(file)
+
+            content_list = get_node_ast(file)
+            for content in content_list:
+                ast = content['ast']
+                code = content['code']
+                print("content %s" % content)
+                code_embedding = parse_code_and_ast(ast, code, api_key)
+                embeddings_output.append(code_embedding)
         elif extension == 'swift':
             content = parse_swift_file(file)
+            print("content %s" % content)
+            code_embedding = parse_code_and_ast(ast, json.dumps(content), api_key)
+            embeddings_output.append(code_embedding)
         else:
             content = "Unsupported file type"
-        
-        code_embedding = parse_code(file, json.dumps(content), api_key)
-        embeddings_output.append(code_embedding)
 
     with open(output_file, 'w') as file:
         json.dump(embeddings_output, file, indent=4)  
