@@ -50,17 +50,22 @@ def load_embeddings_with_code(file_path):
     embeddings = []
     codes = []
     asts = []
+    paths = []
     for item in data:
         embedding = item.get('embedding')
 
         if not embedding:
             continue
+        
+        # if "test." in item["path"] or ".spec." in item["path"]:
+        #     continue
 
         embeddings.append(embedding)
         codes.append(item['code'])  
         asts.append(item['ast'])  
+        paths.append(item['path'])  
 
-    return np.array(embeddings), codes, asts
+    return np.array(embeddings), codes, asts, paths
 
 def load_code_from_paths(paths):
     """Load code content from a list of file paths."""
@@ -81,7 +86,7 @@ def load_new_feature_embedding(file_path):
     embedding = np.array(data['embedding'])  # Extract and convert the embedding to a numpy array
     return description, embedding
 
-def find_relevance(embeddings, asts, codes, new_feature_embedding, top_n=30):
+def find_relevance(embeddings, paths, asts, codes, new_feature_embedding, top_n=30):
     # Calculate cosine similarity
     similarities = cosine_similarity(new_feature_embedding.reshape(1, -1), embeddings)[0]
    
@@ -99,9 +104,11 @@ def find_relevance(embeddings, asts, codes, new_feature_embedding, top_n=30):
     relevant_indices = sorted(high_confidence_indices, key=lambda i: similarities[i], reverse=True)[:top_n]
     print("relevant indices")
     print(relevant_indices)
-    return [codes[i] for i in relevant_indices]
+    return [paths[i] for i in relevant_indices]
     
-def feature_to_code_segments(embeddings, asts, codes, new_feature_embedding, top_n=15):
+from itertools import groupby
+from operator import itemgetter
+def feature_to_code_segments(embeddings, paths, asts, codes, new_feature_embedding, top_n=15):
     # Calculate cosine similarity
     similarities = cosine_similarity(new_feature_embedding.reshape(1, -1), embeddings)[0]
 
@@ -123,11 +130,19 @@ def feature_to_code_segments(embeddings, asts, codes, new_feature_embedding, top
     # codes = load_code_from_paths([asts[i] for i in relevant_indices])
 
     # Compile relevant codes and paths, ensuring to sort by similarity
-    relevant_codes_paths = [(codes[idx], asts[i], similarities[i]) for idx, i in enumerate(relevant_indices)]
+    relevant_codes_paths = [(codes[idx], paths[i], similarities[i]) for idx, i in enumerate(relevant_indices)]
     relevant_codes_paths.sort(key=lambda x: x[2], reverse=True)
 
-    for _, ast, similarity in relevant_codes_paths:
-        print(f"AST: {ast}, Confidence: {similarity:.2f}")
+    relevant_codes_paths.sort(key=itemgetter(1)) # sort by path
+
+    # # Use groupby
+    # relevant_codes_paths = {key: list(group) for key, group in groupby(relevant_codes_paths, key=itemgetter(0))}
+
+    
+    print(relevant_codes_paths)
+
+    # for _, ast, similarity in relevant_codes_paths:
+    #     print(f"AST: {ast}, Confidence: {similarity:.2f}")
 
     return relevant_codes_paths
 
@@ -507,14 +522,14 @@ def main(prompt: str, api_key: str, model: str, top_n=15):
     """
 
     # Load the embeddings and paths from another JSON (as per your existing structure)
-    embeddings, codes, asts = load_embeddings_with_code('embeddings_output.json')
+    embeddings, codes, asts, paths = load_embeddings_with_code('embeddings_output.json')
     
     new_feature_embedding = generate_embedding(prompt, api_key)
     new_feature_embedding = np.array(new_feature_embedding)
 
     # Find the top N most relevant code segments
-    relevant_code_paths = feature_to_code_segments(embeddings, asts, codes, new_feature_embedding, top_n)
-    asts = [ast for _, ast, _ in relevant_code_paths]
+    relevant_code_paths = feature_to_code_segments(embeddings, paths, asts, codes, new_feature_embedding, top_n)
+    # asts = [ast for _, ast, _ in relevant_code_paths]
     
     improved_feature_prompt = prompt_open_ai(prompt, codes, api_key, model)
     new_feature_embedding = generate_embedding(improved_feature_prompt, api_key)
@@ -525,7 +540,7 @@ def main(prompt: str, api_key: str, model: str, top_n=15):
     embeddings_output = []
 
     # for ast in asts:
-    for i in range(1, len(asts)):
+    # for i in range(1, len(asts)):
         # code_groupings_def = parse_swift_files(paths)
         # extension = path.split('.')[-1].lower()
             
@@ -543,14 +558,16 @@ def main(prompt: str, api_key: str, model: str, top_n=15):
         #     code_groupings_def = "Unsupported file type"
 
         # extracted_code = extract_relevant_code(path, code_groupings_def)
-        ast = asts[i]
-        extracted_code = codes[i]
         # result = get_node_ast(path)
         # extracted_code = result['code']
         # ast = result['ast']
+        # START HERE
+        # ast = asts[i]
+        # extracted_code = codes[i]
 
-        embedding = parse_code_and_ast(ast, extracted_code, api_key)
-        embeddings_output.append(embedding)
+        # embedding = parse_code_and_ast(ast, extracted_code, api_key)
+        # embeddings_output.append(embedding)
+        # END HERE
 
         # interfaces = extracted_code.get("interfaces", [])
         # classes = extracted_code.get("classes", [])
@@ -588,18 +605,40 @@ def main(prompt: str, api_key: str, model: str, top_n=15):
     # print("PATHS")
     # print(paths)
     # Find the top N most relevant code segments
-    relevant_code = find_relevance(embeddings, asts, codes, new_feature_embedding, top_n)
+    # relevant_code = find_relevance(embeddings, paths, asts, codes, new_feature_embedding, top_n)
 
-    response_text = prompt_open_ai2(improved_feature_prompt, relevant_code, api_key, model)
+    # response_text = prompt_open_ai2(improved_feature_prompt, relevant_code, api_key, model)
     
     # response_text = make_openai_request_for_prompt(response_text, api_key, "gpt-3.5-turbo", 1000, "format this in html: " + response_text)
     
-    relevant_code_paths_with_confidence = [relevant_code]
+    # relevant_code_paths_with_confidence = ['\n\n'.join(relevant_code)]
+    # relevant_code_paths_with_confidence = [f"{path}: {code}, Confidence: {confidence:.2f}" for code, path, confidence in relevant_code_paths]
+    # Initialize an empty list to store your formatted strings
+    relevant_code_paths_with_confidence = []
+
+    # Initialize a variable to keep track of the last path processed
+    last_path = None
+
+    for code, path, confidence in relevant_code_paths:
+        print("PATH COMPARE")
+        print(path, last_path)
+        if path != last_path:
+            # If the current path is different from the last one, include the path in the string
+            formatted_string = f"{path}: {code}, Confidence: {confidence:.2f}"
+        else:
+            # If the current path is the same as the last one, exclude the path from the string
+            formatted_string = f"{code}, Confidence: {confidence:.2f}"
+        
+        # Add the formatted string to your list
+        relevant_code_paths_with_confidence.append(formatted_string)
+        
+        # Update the last path processed
+        last_path = path
     # response_text = prompt_gemini(prompt, paths, api_key, model)
 
     return {
         'relevant_code_paths': relevant_code_paths_with_confidence,
-        'response': response_text
+        'response': "response_text"
     }
     
 
