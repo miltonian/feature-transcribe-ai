@@ -229,7 +229,7 @@ def main(prompt: str, api_key: str, model: str):
                                                     code_for_context += "\n\n"
             
 
-    if not code_for_context:
+    if not code_for_context or not code_identifiers_to_modify_arr or not paths_to_modify_arr:
         logging.info(f"{Fore.GREEN}Analysis completed. Here's a summary:{Style.RESET_ALL}")
 
         if is_new_conversation: 
