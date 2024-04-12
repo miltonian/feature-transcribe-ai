@@ -9,6 +9,17 @@ FeatureTranscribeAI is an innovative tool designed to streamline the development
 - Identifies relevant existing code
 - Crafts prompts for generative models to automatically generate code fulfilling the feature request.
 
+## Demo
+**Find relevant files with a prompt**
+https://github.com/miltonian/feature-transcribe-ai/assets/8435923/2af2ad7e-e695-47bd-a9b8-89f95d08f1e6
+
+**Write code WITH your code as context**
+https://github.com/miltonian/feature-transcribe-ai/assets/8435923/2f9a0a12-f41c-493e-a979-1ea1abf0ef7f
+
+**Continue the converation and add context**
+
+https://github.com/miltonian/feature-transcribe-ai/assets/8435923/1bdcba44-1f50-482b-a4ea-60c3eac88595
+
 ## Features
 
 - **Automated Embeddings Generation**: Generate embeddings from your existing codebase to understand and analyze your code at a deeper level.
