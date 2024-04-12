@@ -138,91 +138,93 @@ def main(prompt: str, api_key: str, model: str):
     console.print("paths_to_modify_arr",paths_to_modify_arr )
     console.print("code_identifiers_to_modify_arr",code_identifiers_to_modify_arr )
     code_for_context = ""
-    for path_to_modify in paths_to_modify_arr:
-        path = path_to_modify
-        for code_identifier_to_modify in code_identifiers_to_modify_arr:
-            existing_embeddings = get_node_ast(path, code_identifier_to_modify)
-            search_value = code_identifier_to_modify
-            pattern = r"(^Identifier: (\w+)|StringLiteral: \"([^\"]+)\")"
 
-            filtered_by_path = [item for item in existing_embeddings if path in item["path"]]
-            for data in filtered_by_path:
-                matches = get_node_ast(data['path'], search_value)
-                found_value = None
-                if matches:
-                    found_value = matches[0]
-                    if found_value:
-                        data = found_value
-                        ast = found_value['ast']
-                        if ast:
-                            code = data['code']
-                            ast = data['ast']
-                            path = data['path']
-                            code_for_context += f"file: {path}"
-                            pattern = r"Identifier: (\w+)"
-                            identifiers = re.findall(pattern, ast)
-                            
-                            for identifier in identifiers:
-                                filtered_by_path_2 = [item for item in filtered_by_path if re.search(pattern, item['ast'])]
-                                find_import_pattern = fr"ImportDeclaration: .*{identifier}"
-                                found_import = [item for item in filtered_by_path_2 if re.search(find_import_pattern, item['ast'])]
-                                if found_import:
-                                    import_code = found_import[0].get('code', None)
-                                    code_for_context += import_code
-                                    code_for_context += "\n"
+    if code_identifiers_to_modify_arr and paths_to_modify_arr:
+        for path_to_modify in paths_to_modify_arr:
+            path = path_to_modify
+            for code_identifier_to_modify in code_identifiers_to_modify_arr:
+                existing_embeddings = get_node_ast(path, code_identifier_to_modify)
+                search_value = code_identifier_to_modify
+                pattern = r"(^Identifier: (\w+)|StringLiteral: \"([^\"]+)\")"
+
+                filtered_by_path = [item for item in existing_embeddings if path in item["path"]]
+                for data in filtered_by_path:
+                    matches = get_node_ast(data['path'], search_value)
+                    found_value = None
+                    if matches:
+                        found_value = matches[0]
+                        if found_value:
+                            data = found_value
+                            ast = found_value['ast']
+                            if ast:
+                                code = data['code']
+                                ast = data['ast']
+                                path = data['path']
+                                code_for_context += f"file: {path}"
+                                pattern = r"Identifier: (\w+)"
+                                identifiers = re.findall(pattern, ast)
+                                
+                                for identifier in identifiers:
+                                    filtered_by_path_2 = [item for item in filtered_by_path if re.search(pattern, item['ast'])]
+                                    find_import_pattern = fr"ImportDeclaration: .*{identifier}"
+                                    found_import = [item for item in filtered_by_path_2 if re.search(find_import_pattern, item['ast'])]
+                                    if found_import:
+                                        import_code = found_import[0].get('code', None)
+                                        code_for_context += import_code
+                                        code_for_context += "\n"
 
 
-                            code_for_context += "\n\n"
-                            code_for_context += code
-                            code_for_context += "\n\n"        
+                                code_for_context += "\n\n"
+                                code_for_context += code
+                                code_for_context += "\n\n"        
 
-                            for identifier in identifiers:
-                                filtered_by_path_2 = [item for item in filtered_by_path if re.search(pattern, item['ast'])]
-                                find_import_pattern = fr"ImportDeclaration: .*{identifier}"
-                                found_import = [item for item in filtered_by_path_2 if re.search(find_import_pattern, item['ast'])]
-                                if found_import:
-                                    found_import = found_import[0].get('ast', None)
+                                for identifier in identifiers:
+                                    filtered_by_path_2 = [item for item in filtered_by_path if re.search(pattern, item['ast'])]
+                                    find_import_pattern = fr"ImportDeclaration: .*{identifier}"
+                                    found_import = [item for item in filtered_by_path_2 if re.search(find_import_pattern, item['ast'])]
+                                    if found_import:
+                                        found_import = found_import[0].get('ast', None)
 
-                                    # Pattern to find the value following "Identifier: "
-                                    identifier_pattern = r"Identifier: ([^\n]+)"
+                                        # Pattern to find the value following "Identifier: "
+                                        identifier_pattern = r"Identifier: ([^\n]+)"
 
-                                    # Pattern to find the value following "StringLiteral: "
-                                    string_literal_pattern = r"StringLiteral: \"([^\"]+)\""
-                                    # Using re.search since we're interested in the first occurrence
-                                    identifier_match = re.search(identifier_pattern, found_import)
+                                        # Pattern to find the value following "StringLiteral: "
+                                        string_literal_pattern = r"StringLiteral: \"([^\"]+)\""
+                                        # Using re.search since we're interested in the first occurrence
+                                        identifier_match = re.search(identifier_pattern, found_import)
 
-                                    # Extracting the matched groups if found
-                                    identifier_value = identifier_match.group(1) if identifier_match else None
-                                    string_literal_matches = re.findall(string_literal_pattern, found_import)
-                                    string_literal_value = string_literal_matches[-1] if string_literal_matches else None
+                                        # Extracting the matched groups if found
+                                        identifier_value = identifier_match.group(1) if identifier_match else None
+                                        string_literal_matches = re.findall(string_literal_pattern, found_import)
+                                        string_literal_value = string_literal_matches[-1] if string_literal_matches else None
 
-                                    print("found Identifier:", identifier_value)
-                                    print("found StringLiteral:", string_literal_value)
+                                        print("found Identifier:", identifier_value)
+                                        print("found StringLiteral:", string_literal_value)
 
-                                    filtered_by_import_path = get_node_ast(data['path'], string_literal_value.replace('.', '').replace('@', ''))
-                                    search_value = identifier_value
+                                        filtered_by_import_path = get_node_ast(data['path'], string_literal_value.replace('.', '').replace('@', ''))
+                                        search_value = identifier_value
 
-                                    pattern = r"Identifier: (\w+)"
+                                        pattern = r"Identifier: (\w+)"
 
-                                    for item in filtered_by_import_path:
-                                        ast = item.get("ast", "")
-                                        
-                                        # Search for the pattern
-                                        match = re.search(pattern, ast)
-                                        # found = None
-                                        if match:
-                                            # Extract the value found after "Identifier: "
-                                            found_value = match.group(1)
+                                        for item in filtered_by_import_path:
+                                            ast = item.get("ast", "")
                                             
-                                            # Check if the found value equals your search value
-                                            if found_value == search_value:
-                                                # found = match
-                                                print("The value after 'Identifier: ' equals", search_value)
-                                                print(item['code'])
-                                                code_for_context += f"file: {item['path']}"
-                                                code_for_context += "\n\n"
-                                                code_for_context += item['code']
-                                                code_for_context += "\n\n"
+                                            # Search for the pattern
+                                            match = re.search(pattern, ast)
+                                            # found = None
+                                            if match:
+                                                # Extract the value found after "Identifier: "
+                                                found_value = match.group(1)
+                                                
+                                                # Check if the found value equals your search value
+                                                if found_value == search_value:
+                                                    # found = match
+                                                    print("The value after 'Identifier: ' equals", search_value)
+                                                    print(item['code'])
+                                                    code_for_context += f"file: {item['path']}"
+                                                    code_for_context += "\n\n"
+                                                    code_for_context += item['code']
+                                                    code_for_context += "\n\n"
             
 
     if not code_for_context:
