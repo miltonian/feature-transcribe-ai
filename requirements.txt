@@ -3,12 +3,9 @@ numpy
 typing
 argparse
 openai
-utils
-flask
+# flask
 nltk
-scikit-learn
-google-generativeai
 pathlib
-ipython
-jsonrpcclient
-flask-cors
+# flask-cors
+colorama
+rich

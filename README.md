@@ -28,7 +28,7 @@ FeatureTranscribeAI is an innovative tool designed to streamline the development
 
 - Python 3.x
 - OpenAI API Key
-- Required Python libraries (`numpy`, `requests`, `scikit-learn`, etc.)
+- Required Python libraries (`numpy`, `requests`, etc.)
 
 ## Setup
 

@@ -1,11 +1,11 @@
 import argparse
-from feature_transcribe.code_parser import parse_swift_file, parse_code, parse_ts_js_code, get_node_ast, parse_tls, parse_code_and_ast
-from feature_transcribe.utils import find_files
+from code_parser import parse_swift_file, parse_code, parse_ts_js_code, get_node_ast, parse_tls, parse_code_and_ast
+from utils import find_files
 import json
 from pathlib import Path
-from feature_transcribe.diff_utils import get_changed_files, save_last_processed_commit, get_last_processed_commit, read_existing_embeddings, remove_old_embeddings_for_changed_files, get_untracked_files
+from diff_utils import get_changed_files, save_last_processed_commit, get_last_processed_commit, read_existing_embeddings, remove_old_embeddings_for_changed_files, get_untracked_files
 import subprocess 
-from feature_transcribe.openai_api import generate_embedding, send_message_to_chatgpt
+from openai_api import generate_embedding, send_message_to_chatgpt
 from openai import OpenAI
 
 
@@ -29,11 +29,10 @@ def main(directory: str, api_key: str, output_file: str):
 
     changed_files.extend(untracked_files)
     print("changed files: %s" % changed_files)
-    # Read the existing embeddings and remove old entries for changed files
+
     existing_embeddings = read_existing_embeddings(output_file)
     updated_embeddings = remove_old_embeddings_for_changed_files(existing_embeddings, changed_files)
-    # i=0
-    # embeddings_output = []
+    
     for file in find_files(directory):
         
         if last_commit and file not in changed_files:
@@ -54,8 +53,6 @@ def main(directory: str, api_key: str, output_file: str):
             if not code:
                 continue
 
-            # summary = send_message_to_chatgpt(f"""
-            #     give me a brief summary of this file. include whatever you think would be important for semantic search. only return the summary in your response
             summary = send_message_to_chatgpt(f"""
                 give me a very brief comma separated list of the key points of this file as if i were a product person. i just want to know what it's meant for. your response will be used for generating an embedding to help a product person to search through
 
@@ -72,17 +69,6 @@ def main(directory: str, api_key: str, output_file: str):
                 'code': code
             }
             updated_embeddings.append(code_embedding)
-            # content_list = get_node_ast(file)
-            # for content in content_list:
-            #     ast = content['ast']
-            #     code = content['code']
-            #     print("content %s" % content)
-                # code_embedding = parse_code_and_ast(ast, code, api_key)
-            #     code_embedding['path'] = file
-            #     updated_embeddings.append(code_embedding)
-            # i+=1
-            # if i==5:
-            #     break
                 
         elif extension == 'swift':
             content = parse_swift_file(file)
@@ -92,7 +78,7 @@ def main(directory: str, api_key: str, output_file: str):
             updated_embeddings.append(code_embedding)
         else:
             content = "Unsupported file type"
-        # i+=1
+
     with open(output_file, 'w') as file:
         json.dump(updated_embeddings, file, indent=4)  
 

@@ -1,5 +1,5 @@
 from typing import List, Dict, Any
-from feature_transcribe.openai_api import generate_embedding
+from openai_api import generate_embedding
 import re 
 from pathlib import Path
 

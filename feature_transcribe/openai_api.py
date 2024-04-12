@@ -19,6 +19,16 @@ def save_thread_id(thread_id: str):
     with open(".thread_id", 'w') as file:
         file.write(thread_id)
         
+def delete_thread_id():
+    """Deletes the .thread_id file."""
+    try:
+        os.remove(".thread_id")
+        # print("Thread ID file deleted successfully.")
+    except FileNotFoundError:
+        print("File not found.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        
 def read_assistant_id_from_file():
     file_path = assistant_file_path
     if os.path.exists(file_path):
@@ -65,7 +75,7 @@ def get_system_message_content(response):
     combined_message = "\n\n".join([msg[1] for msg in assistant_messages_with_timestamps])
     return combined_message
 
-def send_message_to_assistant(message, api_key, model="gpt-3.5-turbo", additional_instructions=None):
+def send_message_to_assistant(message, api_key, model="gpt-3.5-turbo", additional_instructions="."):
     client = OpenAI(api_key=api_key)
 
     assistant_id = read_assistant_id_from_file()
@@ -79,6 +89,7 @@ def send_message_to_assistant(message, api_key, model="gpt-3.5-turbo", additiona
         run = client.beta.threads.create_and_run(
             model=model,
             assistant_id=assistant_id,
+            instructions=additional_instructions,
             thread={
                 "messages": [
                     {
@@ -101,7 +112,7 @@ def send_message_to_assistant(message, api_key, model="gpt-3.5-turbo", additiona
                 thread_id=thread_id,
                 model=model,
                 assistant_id=assistant_id,
-                additional_instructions=additional_instructions
+                instructions=additional_instructions
             )
         else:
             message = client.beta.threads.messages.create(
@@ -112,7 +123,8 @@ def send_message_to_assistant(message, api_key, model="gpt-3.5-turbo", additiona
             run =  client.beta.threads.runs.create(
                 thread_id=thread_id,
                 model=model,
-                assistant_id=assistant_id
+                assistant_id=assistant_id,
+                instructions=additional_instructions
             )
 
     # Wait for the thread run to complete, checking periodically
@@ -135,7 +147,7 @@ def send_message_to_assistant(message, api_key, model="gpt-3.5-turbo", additiona
             "thread_id": run.thread_id
         }
     else:
-        return "The run did not complete in time."
+        return {"message": "The run did not complete in time."}
 
 def send_message_to_chatgpt(prompt, api_key, model="gpt-3.5-turbo", max_tokens=1000):
     client = OpenAI(api_key=api_key)
@@ -147,8 +159,6 @@ def send_message_to_chatgpt(prompt, api_key, model="gpt-3.5-turbo", max_tokens=1
         ]
     )
     message = completion.choices[0].message.content
-    print("message")
-    print(message)
     return message
 
 def generate_embedding(input_text, api_key):

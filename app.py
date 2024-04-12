@@ -34,7 +34,7 @@ def feature_to_code():
     identifier = request.form['functionName']
     num_of_embeddings = 20 # request.form['num_of_embeddings']
 
-    response = frc.main(absolute_path, identifier, feature, api_key, model, int(num_of_embeddings))
+    response = frc.main(feature, api_key, model)
     return jsonify(response)
 
 if __name__ == '__main__':
