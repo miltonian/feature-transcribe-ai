@@ -4,7 +4,7 @@ import json
 import logging
 from sklearn.metrics.pairwise import cosine_similarity
 from code_parser import get_node_ast
-from openai_api import generate_embedding, send_message_to_assistant, create_and_store_new_assistant_id, read_assistant_id_from_file
+from openai_api import generate_embedding, send_message_to_assistant, create_and_store_new_assistant_id, read_assistant_id_from_file, get_thread_id
 from colorama import Fore, Style
 from rich.console import Console
 from rich.markdown import Markdown
@@ -106,10 +106,12 @@ def main(prompt: str, api_key: str, model: str):
         files_and_summaries.append(f"file {path} summary: {summary}")
     
     assistant_id = read_assistant_id_from_file()
+    thread_id = get_thread_id()
     is_new_conversation = False
     if not assistant_id:
-        is_new_conversation = True
         create_and_store_new_assistant_id(model, api_key)
+    if not thread_id:
+        is_new_conversation = True
     
     files_and_summaries_str = "\n".join(files_and_summaries)
 
