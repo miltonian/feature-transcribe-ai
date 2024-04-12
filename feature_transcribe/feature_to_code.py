@@ -137,11 +137,9 @@ def main(prompt: str, api_key: str, model: str):
                 temp_paths_to_modify_arr.append(path)
 
     paths_to_modify_arr = temp_paths_to_modify_arr
-    console.print("paths_to_modify_arr",paths_to_modify_arr )
-    console.print("code_identifiers_to_modify_arr",code_identifiers_to_modify_arr )
     code_for_context = ""
 
-    if code_identifiers_to_modify_arr and paths_to_modify_arr:
+    if len(code_identifiers_to_modify_arr) > 0 and len(paths_to_modify_arr) > 0:
         for path_to_modify in paths_to_modify_arr:
             path = path_to_modify
             for code_identifier_to_modify in code_identifiers_to_modify_arr:
@@ -229,7 +227,7 @@ def main(prompt: str, api_key: str, model: str):
                                                     code_for_context += "\n\n"
             
 
-    if not code_for_context or not code_identifiers_to_modify_arr or not paths_to_modify_arr:
+    if code_for_context =="" or len(code_identifiers_to_modify_arr) == 0 or len(paths_to_modify_arr) == 0:
         logging.info(f"{Fore.GREEN}Analysis completed. Here's a summary:{Style.RESET_ALL}")
 
         if is_new_conversation: 

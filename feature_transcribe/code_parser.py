@@ -164,8 +164,8 @@ def get_node_ast(path: str, search: str):
                 ast_snippets.append(parsed_output)
                 # print("AST %s" % parsed_output["ast"])
             except json.JSONDecodeError as e:
-                print(f"Failed to decode JSON: {e}")
-                print(f"Faulty output: {output}")
+                # print(f"Failed to decode JSON: {e}")
+                # print(f"Faulty output: {output}")
                 return []
         # parsed_output = json.loads(result.stdout)
 
