@@ -228,7 +228,7 @@ def main(prompt: str, api_key: str, model: str):
             
 
     if code_for_context =="" or len(code_identifiers_to_modify_arr) == 0 or len(paths_to_modify_arr) == 0:
-        logging.info(f"{Fore.GREEN}Analysis completed. Here's a summary:{Style.RESET_ALL}")
+        console.print(f"{Fore.GREEN}Analysis completed. Here's a summary:{Style.RESET_ALL}")
 
         if is_new_conversation: 
 
