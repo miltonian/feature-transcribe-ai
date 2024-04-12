@@ -241,7 +241,8 @@ def main(prompt: str, api_key: str, model: str):
             response = send_message_to_assistant(
                 prompt, 
                 api_key, 
-                model
+                model,
+                "base your answer on the entire context of this thread"
             )
             console.print((Markdown(response['message'])))  
             return {
