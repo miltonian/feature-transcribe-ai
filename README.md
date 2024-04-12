@@ -11,9 +11,11 @@ FeatureTranscribeAI is an innovative tool designed to streamline the development
 
 ## Demo
 **Find relevant files with a prompt**
+
 https://github.com/miltonian/feature-transcribe-ai/assets/8435923/2af2ad7e-e695-47bd-a9b8-89f95d08f1e6
 
 **Write code WITH your code as context**
+
 https://github.com/miltonian/feature-transcribe-ai/assets/8435923/2f9a0a12-f41c-493e-a979-1ea1abf0ef7f
 
 **Continue the converation and add context**
