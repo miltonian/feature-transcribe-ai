@@ -51,11 +51,29 @@ Using FeatureTranscribeAI involves just a couple of straightforward steps. Befor
    ```bash
    sh sync.sh
 
-3. **Identify Relevant Code**: Once your codebase is prepared, run `sh run.sh` with a description of the new feature you want to integrate. The script uses the generated embeddings to find code snippets that are most relevant to your feature request.
+3. **Starting coding with AI**: Once your codebase is prepared, run `sh run.sh` with a description of the new feature you want to integrate. The script uses the generated embeddings to find code snippets that are most relevant to your feature request.
 
     ```bash
     sh run.sh
- This command analyzes the embeddings to match your feature request with existing code, helping you identify where and how to best integrate new features.
+
+## How to Provide a Feature Description
+When prompted, you can interact with the tool in various ways, depending on the context of your request and the information you provide:
+
+### Initial Request
+- **First Message to the AI**: If it's your first interaction in a session, the AI needs context to understand where to locate or suggest relevant code. You can either:
+  - **Provide Detailed Context**: Include both the filename or path and a clearly identifiable code snippet (e.g., `describe("Some test case")`, `router.put("/some/endpoint")`, or `export const someVariableOrFunction`). This helps in pinpointing the exact location for implementing or modifying code.
+  - **General Inquiry**: If you don’t provide specific details, the AI will make an educated guess based on its understanding of the codebase and indicate where the relevant code might likely exist.
+
+ ### Subsequent Requests
+ - **Adding Code Context**: If you are continuing a conversation and wish to add specific code context to refine or expand upon a previous inquiry, ensure to provide both the filename or path and a specific code snippet. This will help the AI to accurately address your new context or modify its previous responses.
+ - **General Discussion**: If specific details are not provided after the initial context has been set, you can freely discuss other aspects or follow up with general inquiries. The AI will base its responses on the accumulated context of the conversation, using any prior detailed information you've provided to inform its responses.
+
+ ### General Usage
+ - You are not restricted to only providing detailed context; you may ask questions or make requests in any form. However, the accuracy and relevance of the AI's response can be significantly enhanced by how specific the provided information is, especially in your initial interaction or when adding new context.
+
+
+
+ 
 
 ### Respecting .gitignore
 
