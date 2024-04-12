@@ -1,8 +1,11 @@
 from flask import Flask, render_template, request, jsonify
 import feature_transcribe.prepare_code as pc
 import feature_transcribe.feature_to_code as frc
+from flask_cors import CORS  # Import CORS
+
 
 app = Flask(__name__)
+CORS(app)
 
 @app.route('/')
 def index():
@@ -27,6 +30,9 @@ def feature_to_code():
     feature = request.form['feature']
     api_key = request.form['api_key']
     model = request.form['model']
+    absolute_path = request.form['path']
+    identifier = request.form['functionName']
+    num_of_embeddings = 20 # request.form['num_of_embeddings']
 
     response = frc.main(feature, api_key, model)
     return jsonify(response)

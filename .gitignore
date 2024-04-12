@@ -1,5 +1,11 @@
 .DS_Store
 __pycache__
 embeddings_output.json
+embeddings_output_*.json
 temp_aggregated_code.txt
 assistant_id.json
+code_embeddings_output.json
+node_modules
+.last_processed_commit
+.assistant_id.json
+.thread_id

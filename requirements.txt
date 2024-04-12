@@ -3,7 +3,9 @@ numpy
 typing
 argparse
 openai
-utils
-flask
+# flask
 nltk
-scikit-learn
+pathlib
+# flask-cors
+colorama
+rich

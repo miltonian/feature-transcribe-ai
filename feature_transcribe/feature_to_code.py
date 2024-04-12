@@ -1,85 +1,43 @@
 import argparse
-from feature_transcribe.openai_api import generate_embedding
 import numpy as np
 import json
-import requests
-import time
+import logging
 from sklearn.metrics.pairwise import cosine_similarity
-from openai import OpenAI
-import os
+from code_parser import get_node_ast
+from openai_api import generate_embedding, send_message_to_assistant, create_and_store_new_assistant_id, read_assistant_id_from_file
+from colorama import Fore, Style
+from rich.console import Console
+from rich.markdown import Markdown
 
 
-def read_assistant_id_from_file(file_path):
-    if os.path.exists(file_path):
-        try:
-            with open(file_path, 'r') as file:
-                data = json.load(file)
-            return data.get('assistant_id')
-        except (IOError, json.JSONDecodeError) as error:
-            print(f"Error reading from {file_path}: {error}")
-    return None
+# Configure logging
+logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def create_and_store_new_assistant_id(file_path: str, model:str, api_key: str):
-    client = OpenAI(api_key=api_key)
+console = Console()
+
+def load_embeddings_with_code(file_path: str, include_tests: bool = False):
+    console.print("Loading embeddings from file...")
     try:
-        instructions = "You are a principal software engineer. Please provide the entire coding solution based on the context provided in the uploaded files. Base your response on the files included in the request. your response should include all of the exact code i need to copy and paste into my application to solve the request. when referencing files, don't reference the ids, reference the names. if you need to do a deeper analysis of the code in certain files, please do so so you can best fulfill the request. yes, you have direct access to the content of these files and can analyze the deeply enough to fit the code you provide nicely into the existing files themselves. language of the code should match the language of files given. and yes, you have direct access to the content of these files and can analyze them deeply. yes you have access to external content directly"
+        with open(file_path, 'r') as file:
+            data = json.load(file)
+    except FileNotFoundError:
+        console.error(f"{Fore.RED}File not found: {file_path}{Style.RESET_ALL}")
+        return None, None, None, None
+    except json.JSONDecodeError:
+        console.error(f"{Fore.RED}Failed to decode JSON.{Style.RESET_ALL}")
+        return None, None, None, None
 
-        # Initialize the chat assistant session
-        assistant = client.beta.assistants.create(
-            instructions=instructions,
-            name="FeatureTranscribeAI",
-            tools=[{"type": "code_interpreter"}],
-            model=model
-        )
-        assistant_id = assistant.id
-        with open(file_path, 'w') as file:
-            json.dump({'assistant_id': assistant_id}, file)
-        return assistant_id
-    except Exception as error:
-        print(f"Error creating new OpenAI Assistant: {error}")
-    return None
-
-def load_embeddings_with_code(file_path):
-    """Load embeddings and corresponding file paths from a JSON file."""
-    with open(file_path, 'r') as file:
-        data = json.load(file)
-
-    embeddings = []
-    paths = []
+    embeddings, codes, summaries, paths = [], [], [], []
     for item in data:
-        # Use .get() to safely access 'embedding', defaulting to None if not found
-        embedding = item.get('embedding')
-
-        # Skip the item if 'embedding' is falsey
-        if not embedding:
+        if not item.get('embedding') or (not include_tests and ("test." in item["path"] or ".spec." in item["path"])):
             continue
-
-        embeddings.append(embedding)
-        paths.append(item['path'])  # Assuming 'path' key always exists
-        # components.append(item['component'])  # Assuming 'component' key always exists
-
-    return np.array(embeddings), paths
-
-def load_code_from_paths(paths):
-    """Load code content from a list of file paths."""
-    codes = []
-    for path in paths:
-        try:
-            with open(path, 'r') as file:
-                codes.append(file.read())
-        except FileNotFoundError:
-            codes.append("File not found: " + path)
-    return codes
-
-def load_new_feature_embedding(file_path):
-    """Load the new feature description and embedding from a JSON file."""
-    with open(file_path, 'r') as file:
-        data = json.load(file)
-    description = data['new_feature_description']  # Extract the description
-    embedding = np.array(data['embedding'])  # Extract and convert the embedding to a numpy array
-    return description, embedding
-
-def feature_to_code_segments(embeddings, paths, new_feature_embedding, top_n=15):
+        embeddings.append(item['embedding'])
+        codes.append(item['code'])
+        summaries.append(item['summary'])
+        paths.append(item['path'])
+    return np.array(embeddings), codes, summaries, paths
+    
+def feature_to_code_segments(embeddings, paths, summaries, codes, new_feature_embedding, top_n=15):
     # Calculate cosine similarity
     similarities = cosine_similarity(new_feature_embedding.reshape(1, -1), embeddings)[0]
 
@@ -91,20 +49,17 @@ def feature_to_code_segments(embeddings, paths, new_feature_embedding, top_n=15)
     dynamic_confidence_threshold = mean_similarity + (1.5 * std_dev_similarity)
 
     # Filter indices by dynamic threshold
-    high_confidence_indices = [i for i, similarity in enumerate(similarities) if similarity >= dynamic_confidence_threshold]
+    high_confidence_indices = [i for i, similarity in enumerate(similarities) ]#if similarity >= dynamic_confidence_threshold]
 
     # Sort high-confidence indices by similarity, then select top N
     relevant_indices = sorted(high_confidence_indices, key=lambda i: similarities[i], reverse=True)[:top_n]
 
-    # Extract code for relevant paths
-    codes = load_code_from_paths([paths[i] for i in relevant_indices])
-
     # Compile relevant codes and paths, ensuring to sort by similarity
-    relevant_codes_paths = [(codes[idx], paths[i], similarities[i]) for idx, i in enumerate(relevant_indices)]
+    relevant_codes_paths = [(summaries[idx], paths[i], similarities[i]) for idx, i in enumerate(relevant_indices)]
     relevant_codes_paths.sort(key=lambda x: x[2], reverse=True)
 
-    for _, path, similarity in relevant_codes_paths:
-        print(f"Path: {path}, Confidence: {similarity:.2f}")
+    # for _, path, similarity in relevant_codes_paths:
+    #     print(f"path: {path}, Confidence: {similarity:.2f}")
 
     return relevant_codes_paths
 
@@ -113,109 +68,7 @@ def aggregate_code_segments(relevant_code_paths):
     aggregated_code = '\n\n'.join([code for code, _, _ in relevant_code_paths])
     return aggregated_code
 
-def upload_files(paths, api_key): 
-    client = OpenAI(api_key=api_key)
-
-    # Initialize a list to store file IDs
-    file_ids = []
-    file_names = []
-    print(paths)
-    # Iterate over relevant code paths and upload each as a file
-    for code_path in paths:
-        with open(code_path, "rb") as file:
-            try:
-                # Attempt to upload the file and store the resulting file ID
-                upload_response = client.files.create(file=file, purpose='assistants')
-                file_ids.append(upload_response.id)
-                file_name_after_last_slash = code_path.split('/')[-1]
-                file_names.append(file_name_after_last_slash)
-            except Exception as e:
-                print(f"Failed to upload {code_path}: {e}")
-
-    if not file_ids:
-        return "No files were uploaded successfully."
-
-    return {
-        'file_ids': file_ids, 
-        'file_names': file_names
-    }
-        
-def send_message_to_assistant(assistant_id, message, file_ids, api_key, model="gpt-3.5-turbo", max_tokens=1000):
-    client = OpenAI(api_key=api_key)
-    
-    run = client.beta.threads.create_and_run(
-        model=model,
-        assistant_id=assistant_id,
-        thread={
-            "messages": [
-                {
-                    "role": "user",
-                    "content": message,
-                    "file_ids": file_ids 
-                }
-            ]
-        }
-    )
-
-    # Wait for the thread run to complete, checking periodically
-    attempts = 0
-    max_attempts = 180
-    while attempts < max_attempts and not run.completed_at:
-        time.sleep(1)
-        run = client.beta.threads.runs.retrieve(thread_id=run.thread_id, run_id=run.id)
-        attempts += 1
-
-    # Handle the completed run
-    if run.completed_at:
-        # Retrieve and aggregate all "assistant" messages
-        thread_messages = client.beta.threads.messages.list(run.thread_id)
-        assistant_messages = get_system_message_content(thread_messages)
-        return assistant_messages
-    else:
-        return "The run did not complete in time."
-
-def make_openai_request_for_prompt(prompt, api_key, model="gpt-3.5-turbo", max_tokens=1000):
-    client = OpenAI(api_key=api_key)
-
-    # Clear and concise instructions
-    instructions = f"""
-    I'm enhancing my project with a new feature and need targeted coding assistance for seamless integration.  Translate this feature description into a prompt for chatgpt using open ai's prompt documentation. your response should include only the prompt i can copy and paste
-        
-        Feature Description:
-        
-        {prompt}
-    """
-    
-
-    completion = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "user", "content": instructions}
-        ]
-    )
-    message = completion.choices[0].message.content
-    print("message")
-    print(message)
-    return message
-
-def delete_file(file_id, api_key):
-    client = OpenAI(api_key=api_key)
-
-    content = client.files.delete(file_id)
-    return content
-    
-def get_system_message_content(response):
-    # Assuming response is a list of message objects
-    assistant_messages_with_timestamps = [(message.created_at, message.content[0].text.value)
-                                           for message in response.data if message.role == 'assistant']
-
-    # Sort the collected messages by timestamp
-    assistant_messages_with_timestamps.sort(key=lambda x: x[0])
-
-    # Extract and join the sorted message texts
-    combined_message = "\n\n".join([msg[1] for msg in assistant_messages_with_timestamps])
-    return combined_message
-
+import re
 
 def main(prompt: str, api_key: str, model: str):
     """
@@ -227,134 +80,209 @@ def main(prompt: str, api_key: str, model: str):
     - model (str): OpenAI model used for generating embeddings.
     """
     
+    # Load the embeddings and paths from another JSON (as per your existing structure)
+    embeddings, codes, summaries, paths = load_embeddings_with_code('embeddings_output.json', "test" in prompt)
+    if embeddings is None:
+        console.error("Failed to load embeddings. Exiting...")
+        return
+    
     new_feature_embedding = generate_embedding(prompt, api_key)
     new_feature_embedding = np.array(new_feature_embedding)
-
-    # Load the embeddings and paths from another JSON (as per your existing structure)
-    embeddings, paths = load_embeddings_with_code('embeddings_output.json')
+    console.print("Embedding generated successfully.")
 
     # Find the top N most relevant code segments
-    relevant_code_paths = feature_to_code_segments(embeddings, paths, new_feature_embedding, top_n=10)
-
-    onlypaths = [path for _, path, _ in relevant_code_paths]
-
-    files = upload_files(onlypaths, api_key)
-    file_ids = files['file_ids']
-    file_names = files['file_names']
-
-    relevant_code_paths_with_confidence = [f"Path: {path}, Confidence: {confidence:.2f}" for _, path, confidence in relevant_code_paths]
+    relevant_code_paths = feature_to_code_segments(embeddings, paths, summaries, codes, new_feature_embedding)
+    if not relevant_code_paths:
+        console.print("No relevant code segments found.")
+        return
     
-    # prompt_response = make_openai_request_for_prompt(prompt, api_key, model)
+    summaries = []
+    paths = []
+    files_and_summaries = []
+    for summary, path, confidence in relevant_code_paths:
+        summaries.append(summary)
 
-    file_path = 'assistant_id.json'
-    assistant_id = read_assistant_id_from_file(file_path)
-
+        paths.append(path)
+        files_and_summaries.append(f"file {path} summary: {summary}")
+    
+    assistant_id = read_assistant_id_from_file()
+    is_new_conversation = False
     if not assistant_id:
-        assistant_id = create_and_store_new_assistant_id(file_path, model, api_key)
+        is_new_conversation = True
+        create_and_store_new_assistant_id(model, api_key)
+    
+    files_and_summaries_str = "\n".join(files_and_summaries)
 
-    if assistant_id:
-        file_names_string = ",".join(file_names)
-        
-        prompt1 = f"""
-            given the following prompt structure, please replace what is wrapped in brackets [] and anything else that seems relevant given the uploaded files and feature description, after you replace it i will send it to chatgpt. so this is meant to be a prompt. it is important that your response is a prompt i can give to chatgpt:
+    assumed_relevant_files_message = send_message_to_assistant(f"""
+        Which of these files are most likely where the code for the feature request would be? or would it need a new file and where? explain why. "codeSnippets" should be the exact copy of anything that resembles a code snippet in the feature description
+        {files_and_summaries_str}
+
+        FEATURE DESCRIPTION: {prompt}
+    """, api_key, model, f"""your response should be json formatted like this {{"answer": "your response about my question", "paths": ["path/to/file1", "path/to/file2"], "codeSnippets": ["code 1", "code 2"]}}, pay close attention to any partial code the user might add to their feature description, extract any code and add to the "codeSnippets" array in your response. "codeSnippets" should be the exact copy of anything that resembles a code snippet in the feature description""")
+    assumed_relevant_files_message = assumed_relevant_files_message['message']
+    
+    json_string = assumed_relevant_files_message.replace("```json", "").replace("```", "")
+    json_response = json.loads(json_string)
+
+    paths_to_modify_arr = json_response['paths']
+    code_identifiers_to_modify_arr = json_response['codeSnippets']
+    assumed_relevant_files_message = json_response['answer']
+    
+    temp_paths_to_modify_arr = []
+    for path in paths:
+        for path_2 in paths_to_modify_arr:
+            if path_2 in path:
+                temp_paths_to_modify_arr.append(path)
+
+    paths_to_modify_arr = temp_paths_to_modify_arr
+    console.print("paths_to_modify_arr",paths_to_modify_arr )
+    console.print("code_identifiers_to_modify_arr",code_identifiers_to_modify_arr )
+    code_for_context = ""
+    for path_to_modify in paths_to_modify_arr:
+        path = path_to_modify
+        for code_identifier_to_modify in code_identifiers_to_modify_arr:
+            existing_embeddings = get_node_ast(path, code_identifier_to_modify)
+            search_value = code_identifier_to_modify
+            pattern = r"(^Identifier: (\w+)|StringLiteral: \"([^\"]+)\")"
+
+            filtered_by_path = [item for item in existing_embeddings if path in item["path"]]
+            for data in filtered_by_path:
+                matches = get_node_ast(data['path'], search_value)
+                found_value = None
+                if matches:
+                    found_value = matches[0]
+                    if found_value:
+                        data = found_value
+                        ast = found_value['ast']
+                        if ast:
+                            code = data['code']
+                            ast = data['ast']
+                            path = data['path']
+                            code_for_context += f"file: {path}"
+                            pattern = r"Identifier: (\w+)"
+                            identifiers = re.findall(pattern, ast)
+                            
+                            for identifier in identifiers:
+                                filtered_by_path_2 = [item for item in filtered_by_path if re.search(pattern, item['ast'])]
+                                find_import_pattern = fr"ImportDeclaration: .*{identifier}"
+                                found_import = [item for item in filtered_by_path_2 if re.search(find_import_pattern, item['ast'])]
+                                if found_import:
+                                    import_code = found_import[0].get('code', None)
+                                    code_for_context += import_code
+                                    code_for_context += "\n"
+
+
+                            code_for_context += "\n\n"
+                            code_for_context += code
+                            code_for_context += "\n\n"        
+
+                            for identifier in identifiers:
+                                filtered_by_path_2 = [item for item in filtered_by_path if re.search(pattern, item['ast'])]
+                                find_import_pattern = fr"ImportDeclaration: .*{identifier}"
+                                found_import = [item for item in filtered_by_path_2 if re.search(find_import_pattern, item['ast'])]
+                                if found_import:
+                                    found_import = found_import[0].get('ast', None)
+
+                                    # Pattern to find the value following "Identifier: "
+                                    identifier_pattern = r"Identifier: ([^\n]+)"
+
+                                    # Pattern to find the value following "StringLiteral: "
+                                    string_literal_pattern = r"StringLiteral: \"([^\"]+)\""
+                                    # Using re.search since we're interested in the first occurrence
+                                    identifier_match = re.search(identifier_pattern, found_import)
+
+                                    # Extracting the matched groups if found
+                                    identifier_value = identifier_match.group(1) if identifier_match else None
+                                    string_literal_matches = re.findall(string_literal_pattern, found_import)
+                                    string_literal_value = string_literal_matches[-1] if string_literal_matches else None
+
+                                    print("found Identifier:", identifier_value)
+                                    print("found StringLiteral:", string_literal_value)
+
+                                    filtered_by_import_path = get_node_ast(data['path'], string_literal_value.replace('.', '').replace('@', ''))
+                                    search_value = identifier_value
+
+                                    pattern = r"Identifier: (\w+)"
+
+                                    for item in filtered_by_import_path:
+                                        ast = item.get("ast", "")
+                                        
+                                        # Search for the pattern
+                                        match = re.search(pattern, ast)
+                                        # found = None
+                                        if match:
+                                            # Extract the value found after "Identifier: "
+                                            found_value = match.group(1)
+                                            
+                                            # Check if the found value equals your search value
+                                            if found_value == search_value:
+                                                # found = match
+                                                print("The value after 'Identifier: ' equals", search_value)
+                                                print(item['code'])
+                                                code_for_context += f"file: {item['path']}"
+                                                code_for_context += "\n\n"
+                                                code_for_context += item['code']
+                                                code_for_context += "\n\n"
             
-            I am seeking to enhance my project by integrating a new feature. For this, I require executable code samples that demonstrate how to implement this feature within my existing codebase. The solution should cover everything from setup, integration, to final testing, with code snippets provided for each step.
 
-            Feature to Implement: [Detailed feature description]
+    if not code_for_context:
+        logging.info(f"{Fore.GREEN}Analysis completed. Here's a summary:{Style.RESET_ALL}")
 
-            The files I've uploaded include: {file_names_string}
-            Please review these files to understand how they contribute to the project and to locate the code snippets that are most relevant to [the specific aspects you're interested in].
+        if is_new_conversation: 
 
-            System Architecture and Existing Code:
-            - Language: describe what programming language, or languages this project uses
-
-            Define a code snippet as relevant if it:
-            - Directly contributes to [specific feature or functionality].
-            - Interacts with [specific component or technology].
-            - Implements a solution to [specific problem or challenge].
-            - Specifically referenced from other relevant code 
-
-            After identifying the relevant code snippets, please:
-            - Extract and present them clearly.
-            - Provide a brief analysis of each snippet, explaining its purpose and functionality within the context of the files.
-            - Highlight any dependencies or external modules they rely on.
-                        
-            Priority for Response:
-            - Please prioritize providing executable code snippets over theoretical explanations. The code should be detailed enough to be directly integrated into my existing project, complete with comments to guide the integration process.
-
-            Integration Instructions:
-            - Based on the extracted code snippets, offer guidance on how they can be integrated or modified to work within the broader context of my project, particularly focusing on [any specific integration challenges or requirements].
-
-            Output Format:
-            - The response should be formatted as executable code snippets, ready to be copied and pasted into my project. Comments should be included to explain the purpose of code sections and their intended integration points.
-
-            Please format your response to include each relevant code snippet followed by its analysis and integration advice. If you encounter code in languages like [specify any languages], focus particularly on those, as they are most critical to my project
-
-            FEATURE DESCRIPTION: {prompt}
+            console.print((Markdown(assumed_relevant_files_message)))  
+            return {
+                "relevant_code_paths": files_and_summaries,
+                "response": assumed_relevant_files_message
+            }
+        else:
+            response = send_message_to_assistant(
+                prompt, 
+                api_key, 
+                model
+            )
+            console.print((Markdown(response['message'])))  
+            return {
+                'response': response['message']
+            }
+    
+    console.print("Found code that will be used as context")
+            
+    improved_feature_prompt = send_message_to_assistant(
+        f"""
+            feature prompt: {prompt}
+        """, 
+        api_key, 
+        model,
         """
-        # STEP 1: break down the request into actionable steps to take 
-        breakdown_prompt_response = send_message_to_assistant(assistant_id, prompt1, file_ids, api_key, model)
-        print("--BREAKDOWN_PROMPT_RESPONSE--")
-        print(breakdown_prompt_response)
-        
-        # STEP 2: get the code from the prompt above
-        response_text = send_message_to_assistant(assistant_id, breakdown_prompt_response, file_ids, api_key, model)
-        print("--CODE RESPONSE--")
-        print(response_text)
+            improve the feature prompt the user lists in the request to be as if coming from a product person directly into the hands of a software engineer to develop this feature in code entirely and, for improving the prompt, please analyze the uploaded files. you should provide the developer with technical specifications/guidelines, and break down the feature into a series of basic steps so the developer can tackle one at a time
 
-        # step 1 old prompt
-        # Specificity in File Descriptions: Start by providing a brief description of each file, including its programming language, purpose (e.g., implementing endpoints, testing, configuration), and any specific sections or functionalities you are particularly interested in. This helps in prioritizing files and sections of code that are most relevant to your query.
+            Respond with the improved prompt and nothing else.
+        """
+    )
+    new_feature_embedding = generate_embedding(improved_feature_prompt['message'], api_key)
+    new_feature_embedding = np.array(new_feature_embedding)
 
-        # Highlight Key Endpoints: Clearly state the endpoints or functionalities you are focusing on, including any specific requirements or behaviors expected from these endpoints. If you are looking for improvements or have encountered issues, describe these in detail to direct the analysis towards solving these specific problems.
+    response = send_message_to_assistant(
+        f"""
+            first, analyze the code from the request and derive the programming language used from the code and then perform the following in that language:
+            
+            {prompt}
+            
+            EXISTING CODE: {code_for_context}
+        """, 
+        api_key, 
+        model,
+        "You are a principal software engineer. Please provide the entire coding solution based on the context provided in the uploaded files. Base your response on the files included in the request. your response should include all of the exact code i need to copy and paste into my application to solve the request. please try to use what you see in the code i pasted and try to assume everything based on the code provided. don't assume any frameworks or dependencies are used unless the code explicitly says that"
+    )
+    
+    console.print(f"{Fore.GREEN}Analysis completed. Here's a summary:{Style.RESET_ALL}")
 
-        # Mention Relevant Technologies and Frameworks: If your project uses specific frameworks (like Express.js for Node.js applications), libraries, or technologies, mention these upfront. Knowing the technology stack helps in tailoring the analysis to the conventions and best practices of those technologies.
-
-        # Request for Structured Code Analysis: If you're interested in specific types of analysis (e.g., code optimization, security best practices, error handling improvements), mention this explicitly. It allows the analysis to focus on these aspects within the context of your provided code.
-
-        # Prioritization of Files or Code Sections: If you have an idea of which files might be more relevant based on their content size, naming, or known functionalities, list these files in the order of priority. This helps in focusing the analysis efforts on the most promising files first.
-
-        # Inclusion of Related Files or Code Snippets: If there are dependencies between files or if a particular piece of code is spread across multiple files, make a note of these relationships. Understanding how different parts of your codebase interact can be crucial for a comprehensive analysis.
-
-        # Use of Code Comments for Guidance: If possible, include comments in your code or provide annotations in your prompt about specific areas of interest or concern. This can guide the analysis directly to the relevant portions of code.
-
-        # Clarity on Desired Outcomes: Clearly articulate what you hope to achieve with the analysis, such as identifying inefficiencies, improving performance, or fixing bugs. This helps in aligning the analysis with your goals.
-
-        # # STEP 1: break down the request into actionable steps to take 
-        # # breakdown_prompt = f"""
-        # # of the files uploaded, {file_names_string} analyze the files you think are most relevant first, then after you analyze, break down the series of simple steps as if to prompt chatgpt to provide the complete code for each step without simplifying the code or giving examples, the code should be exactly as intended so i can copy and paste where it perfectly fits into my existing code: {prompt_response}. if you need to do a deeper analysis of the code in certain files, please do so so you can best fulfill the request. also, adhere to these principles:
-        # # """
-        # breakdown_prompt = f"""
-        # Identify the key functionalities and algorithms within the uploaded files {file_names_string} that are crucial for {prompt_response}. Provide the exact code snippets needed for these functionalities. and yes, you have direct access to the content of these files and can analyze them deeply. yes you have access to external content directly
-        # """
-        # breakdown_prompt_response = send_message_to_assistant(assistant_id, breakdown_prompt, file_ids, api_key, model)
-        # print("--BREAKDOWN_PROMPT_RESPONSE--")
-        # print(breakdown_prompt_response)
-        
-        # # STEP 2: send the broken down prompt to the assistants api 
-        # # response_text = send_message_to_assistant(assistant_id, "follow this chain of thought and translate this into all of the code i would need to copy and paste into my application perfectly fitting in my existing code: " + breakdown_prompt_response + ". again the modifications or specific operations i need is: " + prompt_response, file_ids, api_key, model)
-        # code_prompt = f"Based on this analysis, provide the precise code necessary to implement the identified functionalities in my existing project. The code should be ready to use without further modification. analysis here: {breakdown_prompt_response}. and yes, you have direct access to the content of these files and can analyze them deeply. yes you have access to external content directly"
-        # response_text = send_message_to_assistant(assistant_id, code_prompt, file_ids, api_key, model)
-        # print("--initial noncondensed response--")
-        # print(response_text)
-        
-        # # # STEP 3: take the code and everything else in the step 2 response and condense it down to only the essentials
-        # # condensed_response_prompt = f"take the following response and tell me all of the code that i need to update exactly how it needs to be updated, don't leave any code out and don't give examples or simplify it. i should be able to copy and paste the code and it works. condense all of the noncode text to give me just what i need as far as context: {response_text}. and yes, you have direct access to the content of these files and can analyze the deeply enough to fit the code you provide nicely into the existing files themselves. fill in any code that is missing that i absolutely need to copy and paste into my files"
-        # # response_text = send_message_to_assistant(assistant_id, condensed_response_prompt, file_ids, api_key, model)
-        # # print("--condensed response--")
-        # # print(response_text)
-
-    else:
-        print("Failed to obtain a valid Assistant ID.")
-        
-    for file_id in file_ids:
-        try:
-            delete_file(file_id, api_key)
-        except Exception as e:
-            print(f"Error deleting file from Open AI with ID {file_id}: {e}")
-
+    console.print((Markdown(response['message'])))  
+    
     return {
-        'relevant_code_paths': relevant_code_paths_with_confidence,
-        'response': response_text
+        "relevant_code_paths": [code_for_context],
+        "response": response['message']
     }
     
 
@@ -362,7 +290,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process files to generate embeddings.")
     parser.add_argument('--feature', type=str, required=True, help='Description of the new feature')
     parser.add_argument('--api_key', type=str, required=True, help='OpenAI API key')
-    parser.add_argument('--model', type=str, default="gpt-3.5-turbo", help='OpenAI model')
+    parser.add_argument('--model', type=str, default="gpt-5-turbo-preview", help='OpenAI model')
     args = parser.parse_args()
 
     prompt = args.feature
