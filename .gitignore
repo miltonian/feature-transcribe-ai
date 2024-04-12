@@ -7,3 +7,5 @@ assistant_id.json
 code_embeddings_output.json
 node_modules
 .last_processed_commit
+.assistant_id.json
+.thread_id

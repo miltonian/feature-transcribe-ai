@@ -32,12 +32,12 @@ def parse_code(path:str, code: str, api_key: str) -> Dict[str, Any]:
 def parse_code_and_ast(ast:str, code: str, api_key: str) -> Dict[str, Any]:
     
     # Generate embedding for the entire code
-    embedding = generate_embedding(ast[:5000], api_key)  
+    # embedding = generate_embedding(ast[:5000], api_key)  
 
     file_info = {
         "ast": ast,
         "code": code,
-        "embedding": embedding
+        "embedding": []
     }
 
     return file_info
@@ -148,8 +148,9 @@ def parse_swift_files(file_paths):
     return parsed_data
 
 import subprocess
-def get_node_ast(path: str):
-    command = ['node', 'ts-to-ast.js', path]
+def get_node_ast(path: str, search: str):
+    print(path, search)
+    command = ['node', 'ts-to-ast.js', path, search]
     result = subprocess.run(command, capture_output=True, text=True)
     # ast = result.stdout
     try:
@@ -161,7 +162,7 @@ def get_node_ast(path: str):
                 # Parse the JSON output into a Python dictionary
                 parsed_output = json.loads(output)
                 ast_snippets.append(parsed_output)
-                print("AST %s" % parsed_output["ast"])
+                # print("AST %s" % parsed_output["ast"])
             except json.JSONDecodeError as e:
                 print(f"Failed to decode JSON: {e}")
                 print(f"Faulty output: {output}")

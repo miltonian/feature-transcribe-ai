@@ -42,5 +42,6 @@ def get_untracked_files(directory: str) -> list:
     
     # Split the output by lines to get a list of file paths
     file_list = untracked_files.strip().split('\n')
+    file_list = [directory + "/" + f for f in file_list]
     
     return file_list

@@ -167,11 +167,12 @@
                 <label for="directory">Codebase Directory:</label>
                 <input type="text" id="directory" name="directory" required>
             </div>
-            <input type="submit" value="Prepare Codebase">
+            <input type="submit" value="Sync Code">
             <div id="loadPrepareForm" class="loader"></div>
             <div id="prepareForm-success-message" class="success-message">Codebase prepared successfully.</div>
             <div id="prepareForm-error-message" class="error-message">Error preparing codebase.</div>
         </form>
+
 
         <!-- Transcribe Feature To Code Form -->
         <form id="transcribeForm" action="/feature_to_code" method="post">
@@ -188,6 +189,15 @@
                 </select>
             </div>
             <div class="form-group">
+                <label for="pathInput">Absolute Paths(comma separated):</label>
+                <input type="text" id="pathInput" name="path" >
+            </div>
+            
+            <div class="form-group">
+                <label for="functionNameInput">Function Names(comma separated):</label>
+                <input type="text" id="functionNameInput" name="functionName" >
+            </div>
+            <!-- <div class="form-group">
                 <label for="num_of_embeddings">Embeddings</label>
                 <details>Fewer, less context but less likely to hit a token limit. Greater, more context but more likely to hit a token limit</details>
                 <select id="num_of_embeddings" name="num_of_embeddings">
@@ -200,13 +210,28 @@
                     <option value=50>75</option>
                     <option value=50>100</option>
                 </select>
-            </div>
-            <input type="submit" value="Feature To Code">
+            </div> -->
+            <input type="submit" value="Search Code">
             <div id="loadTranscribeForm" class="loader"></div>
             <div id="transcribeForm-success-message" class="success-message">Transcribed feature to code successfully.
             </div>
             <div id="transcribeForm-error-message" class="error-message">Error transcribing feature to code.</div>
         </form>
+
+        <!-- Custom Function Selector Form -->
+        <!-- <form id="functionSelectorForm" action="/select_function" method="post">
+            <h2>Select a Function</h2>
+            <div class="form-group">
+                <label for="functionSelector">Function:</label>
+                <select id="functionSelector" name="functionSelector">
+                </select>
+            </div>
+            <input type="submit" value="Let's Code!">
+            <div id="loadFunctionSelectorForm" class="loader"></div>
+            <div id="functionSelectorForm-success-message" class="success-message">Function selected successfully.</div>
+            <div id="functionSelectorForm-error-message" class="error-message">Error selecting function.</div>
+        </form> -->
+
 
         <!-- Display Response -->
         <div id="response"></div>
@@ -274,8 +299,22 @@
             }) // Assuming the server response is text
             .then(data => {
                 if (data.relevant_code_paths) {
-                    document.getElementById('relevant-code-paths').innerHTML = "<h3>Relevant Code Paths:</h3><ul>" + data.relevant_code_paths.map(path => '<li>' + path + '</li>').join('') + "</ul><br /><h3>OpenAI API Response:</h3>"
+                    document.getElementById('relevant-code-paths').innerHTML = "<h3>Relevant Code Paths:</h3><ul>" + data.relevant_code_paths.map(path => '<li>' + path + '</li>').join('\n') + "</ul><br /><h3>OpenAI API Response:</h3>"
                     document.getElementById('response').innerText = data.response;
+                    // Example data - replace this with your actual data source
+                    // const functionsList = [
+                    //     { path: '/path/to/function1', name: 'Function1' },
+                    //     { path: '/path/to/function2', name: 'Function2' },
+                    //     // Add more functions as needed
+                    // ];
+
+                    // const functionSelector = document.getElementById('functionSelector');
+
+                    // // Populate dropdown
+                    // functionsList.forEach(function (func) {
+                    //     let option = new Option(`${func.path} - ${func.name}`, func.path);
+                    //     functionSelector.add(option);
+                    // });
                     // document.getElementById('response').innerHTML = (data.response);
                     // let formattedResponse = formatCodeBlocks(data.response);
                     // document.getElementById('response').innerHTML = data.response;
@@ -308,6 +347,23 @@
 
         return false;
     }
+    // document.addEventListener('DOMContentLoaded', function () {
+    //     // Example data - replace this with your actual data source
+    //     const functionsList = [
+    //         { path: '/path/to/function1', name: 'Function1' },
+    //         { path: '/path/to/function2', name: 'Function2' },
+    //         // Add more functions as needed
+    //     ];
+
+    //     const functionSelector = document.getElementById('functionSelector');
+
+    //     // Populate dropdown
+    //     functionsList.forEach(function (func) {
+    //         let option = new Option(`${func.path} - ${func.name}`, func.path);
+    //         functionSelector.add(option);
+    //     });
+    // });
+
 
     // Modified event listeners to include loader ID
     document.getElementById('prepareForm').onsubmit = function () { return submitForm('prepareForm', '/prepare_code', 'loadPrepareForm'); };
