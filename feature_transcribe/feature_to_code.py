@@ -116,11 +116,11 @@ def main(prompt: str, api_key: str, model: str):
     files_and_summaries_str = "\n".join(files_and_summaries)
 
     assumed_relevant_files_message = send_message_to_assistant(f"""
-        Which of these files are most likely where the code for the feature request would be? or would it need a new file and where? explain why. "codeSnippets" should be the exact copy of anything that resembles a code snippet in the feature description
+        Which of these files are most likely where the code for the feature request would be? or would it need a new file and where? explain why. "answer" should be your reasonoing, "paths" should include each path the user specified and "codeSnippets" should be the exact copy of each part of the feature request that resembles a code snippet in the feature description. it is vital this response is in json format
         {files_and_summaries_str}
 
         FEATURE DESCRIPTION: {prompt}
-    """, api_key, model, f"""your response should be json formatted like this {{"answer": "your response about my question", "paths": ["path/to/file1", "path/to/file2"], "codeSnippets": ["code 1", "code 2"]}}, pay close attention to any partial code the user might add to their feature description, extract any code and add to the "codeSnippets" array in your response. "codeSnippets" should be the exact copy of anything that resembles a code snippet in the feature description""")
+    """, api_key, model, f"""your response should be json formatted like this {{"answer": "your response about my question", "paths": ["path/to/file1", "path/to/file2"], "codeSnippets": ["code 1", "code 2"]}}, pay close attention to any partial code the user might add to their feature description, extract each path and add it as an item to the "paths" array, and extract each code snippet and add it as an item to the "codeSnippets" array in your response. "codeSnippets" should be the exact copy of anything that resembles a code snippet in the feature description. it is vital this response is in json format and you don't leave any paths or codeSnippets out of the json values """)
     assumed_relevant_files_message = assumed_relevant_files_message['message']
     json_string = assumed_relevant_files_message.replace("```json", "").replace("```", "").strip()
     json_string = re.sub(r'[\x00-\x1F]+', '', json_string)  # \x00-\x1F includes all control characters
