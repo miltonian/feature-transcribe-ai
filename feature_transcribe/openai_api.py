@@ -72,7 +72,8 @@ def get_system_message_content(response):
     assistant_messages_with_timestamps.sort(key=lambda x: x[0])
 
     # Extract and join the sorted message texts
-    combined_message = "\n\n".join([msg[1] for msg in assistant_messages_with_timestamps])
+    # combined_message = "\n\n".join([msg[1] for msg in assistant_messages_with_timestamps])
+    combined_message = [msg[1] for msg in assistant_messages_with_timestamps][-1]
     return combined_message
 
 def send_message_to_assistant(message, api_key, model="gpt-3.5-turbo", additional_instructions="."):
@@ -101,8 +102,8 @@ def send_message_to_assistant(message, api_key, model="gpt-3.5-turbo", additiona
         )
     else:
         if additional_instructions:
-            empty_thread = client.beta.threads.create()
-            thread_id = empty_thread.id
+            # empty_thread = client.beta.threads.create()
+            # thread_id = empty_thread.id
             message = client.beta.threads.messages.create(
                 thread_id=thread_id,
                 role="user",
